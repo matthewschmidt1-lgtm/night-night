@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>It’s OK to let go</title>
+<style>
+  :root{
+    --stage:#080e1c;
+    --ink:#f5f5f7;
+    --ink-soft:rgba(245,245,247,.62);
+    --ink-line:rgba(245,245,247,.26);
+    --sf:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  }
+  html,body{height:100%;margin:0;background:var(--stage);overflow:hidden}
+  body{font-family:var(--sf);-webkit-font-smoothing:antialiased}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;-webkit-tap-highlight-color:transparent}
+
+  /* everything the owl says: one voice, two moments */
+  .say{
+    position:fixed;left:0;right:0;bottom:50%;box-sizing:border-box;padding:0 24px;
+    text-align:center;color:var(--ink);font-family:var(--sf);pointer-events:none;
+    text-shadow:0 0 18px rgba(6,10,22,.85), 0 1px 3px rgba(0,0,0,.45);
+  }
+  .say.open{font-size:clamp(26px,7vw,46px);font-weight:300;line-height:1.2;white-space:nowrap}
+  .say.open .wd.em{font-weight:500}
+  .say.advice{
+    left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:min(92vw,480px);
+    padding:16px 22px;
+    font-size:clamp(17px,4.5vw,23px);font-weight:300;line-height:1.4;letter-spacing:.01em;
+  }
+  /* a soft, slightly see-through shade behind the advice so it reads in front of the branches */
+  .say.advice::before{
+    content:"";position:absolute;inset:0;z-index:-1;border-radius:20px;
+    background:rgba(5,9,20,.6);
+    box-shadow:0 0 26px 12px rgba(5,9,20,.34);
+    -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+    opacity:var(--pa,0);
+  }
+  .wd{display:inline-block;margin:0 .14em;opacity:0;will-change:transform,opacity,filter}
+
+  #nn{
+    position:fixed;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;pointer-events:none;
+    color:rgba(245,245,247,.92);font-family:var(--sf);font-weight:300;
+    font-size:clamp(56px,17vw,120px);letter-spacing:.05em;text-indent:.05em;line-height:1.08;
+    text-shadow:0 0 30px rgba(140,130,255,.28);
+  }
+  #nn .nl{display:block;opacity:0}
+  #nn .bl{display:inline-block;width:0;height:0}
+  #hint{
+    position:fixed;left:0;right:0;text-align:center;pointer-events:none;
+    bottom:120px;
+    font:300 15px/1.2 var(--sf);letter-spacing:.05em;color:var(--ink);opacity:0;
+    text-shadow:0 0 12px rgba(6,10,22,.9), 0 1px 3px rgba(0,0,0,.6);
+  }
+  #replay{
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
+    font:500 15px/1 var(--sf);color:rgba(245,245,247,.8);
+    background:rgba(8,12,24,.6);border:1px solid var(--ink-line);border-radius:999px;
+    padding:10px 18px;cursor:pointer;
+    opacity:0;pointer-events:none;transition:opacity .4s ease;
+  }
+  #replay.on{opacity:1;pointer-events:auto;transition:opacity 1.4s ease 3s}
+  #replay:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+</style>
+</head>
+<body>
+<canvas id="c" role="img" aria-label="An aspen tree sprouts, grows, turns gold and lets its leaves fall under a slowly turning sky of stars. A wise old owl and a smaller white owl settle in the branches. Tap the owl for night advice from the stars. Left alone, the two owls hop up the tree, share a kiss while hearts drift into the sky, and everything fades to a night of spinning stars, a galaxy of new stars, two blinking owl eyes and a heart made of stars, then the whole night rushes toward you, and the words Night Night appear, each with two owl eyes blinking inside the g, before it all begins again."></canvas>
+<div id="hint">Tap the owl for night advice</div>
+<div id="nn" aria-hidden="true"><div class="nl">Ni<span class="gg">g<i class="bl"></i></span>ht</div><div class="nl">Ni<span class="gg">g<i class="bl"></i></span>ht</div></div>
+<button id="replay" type="button">Replay</button>
+
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const hint = document.getElementById('hint');
+  const btn = document.getElementById('replay');
+  const nn = document.getElementById('nn');
+  const nnLines = [...nn.querySelectorAll('.nl')], gEls = [...nn.querySelectorAll('.gg')], blEls = [...nn.querySelectorAll('.bl')];
+  let nnEyes = [];
+  const speeches = [], advs = [];
+  const beak = { x: 0, y: 0 };
+  const periodPos = { x: 0, y: 0, r: 6 };
+  const pokes = { b: -99, w: -99 };
+  let fsB = 40, fin = null, lastAct = 0;
+
+  const TAU = Math.PI * 2;
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const rgbs = (c, lit = 0) =>
+    `rgb(${Math.min(255, (c[0] + (255 - c[0]) * lit)) | 0},${Math.min(255, (c[1] + (255 - c[1]) * lit)) | 0},${Math.min(255, (c[2] + (255 - c[2]) * lit)) | 0})`;
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+  // ---------- Timeline (game seconds; SPEED slows playback) ----------
+  const T = { turn0: 12, owl: 20.5, owl2: 24, speak: 28.5, leafA: 34, leafF: 35.8, leafD: 5.5, rest: 41, ready: 42, end: 45 };
+  const SPEED = 0.85;
+  const WSTART = [0, 0.8, 1.7, 2.4, 3.1];      // opening line: when each word leaves the beak
+  const LDUR = 1.8;                            // how long a word takes to drift into place
+  const SKY_W = 0.06;                          // the sky turns counterclockwise, constantly (radians per game-second)
+  const SKY_B = 0.10;                          // extra spin during the finale
+  const IDLE = 12;                             // quiet seconds before the owls go off to meet
+
+  const ADVICE = [
+    "The light you’re seeing left its star long ago. Some things keep reaching us after they’ve gone.",
+    "Stars burn without gripping. They never ask the dark to be different.",
+    "The iron in your blood was made inside a dying star. Endings have always become something.",
+    "The North Star holds still so the whole sky can turn. Be gentle with whatever steadies you.",
+    "Stars need the dark to be seen. Be tender with your hardest nights. They’re doing quiet work.",
+    "Nobody is behind. Even the slowest star turns with the rest of the sky.",
+    "The dark between the stars isn’t emptiness. It’s the room they need to shine.",
+    "Some starlight takes a thousand years to arrive. You’re allowed to take your time.",
+    "The stars go quiet every morning. They haven’t gone anywhere. They’re resting in the light.",
+    "Look up for a moment. Whatever you’re carrying will still be there, but you’ll hold it a little lighter.",
+    "A constellation is only distance and patience, connected. Your scattered days make a shape too.",
+    "You don’t have to shine every night. Even the moon takes it one phase at a time.",
+    "Every star up there is older than your worries. Let them be a little smaller tonight.",
+    "Rest is part of the pattern. The sky keeps turning, and the night makes room for you."
+  ];
+  let bag = [];
+  function nextAdvice() {
+    if (!bag.length) bag = shuffle(ADVICE.map((_, i) => i));
+    return ADVICE[bag.pop()];
+  }
+
+  function mulberry(a) {
+    return () => {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function sample(keys, t) {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      if (t <= keys[i][0]) {
+        const [t0, a] = keys[i - 1], [t1, b] = keys[i];
+        const k = smooth(t0, t1, t);
+        return a.map((v, j) => v + (b[j] - v) * k);
+      }
+    }
+    return keys[keys.length - 1][1];
+  }
+
+  // A night sky the whole way through; only the horizon warms with the seasons.
+  const BG_TOP = [[0,[8,14,28]],[11,[10,20,36]],[16,[26,22,38]],[22,[24,20,36]],[31,[14,18,34]],[42,[9,12,26]]];
+  const BG_BOT = [[0,[22,44,50]],[11,[34,66,58]],[16,[104,60,36]],[22,[80,52,46]],[31,[40,46,68]],[42,[26,32,52]]];
+  const GLOW   = [[0,[120,210,140,.10]],[11,[140,220,130,.20]],[15,[255,200,90,.30]],[21,[255,150,70,.22]],[31,[170,180,210,.10]],[42,[150,160,200,.07]]];
+
+  // ---------- Tree structure (unit space: trunk height = 1, y up) ----------
+  const rnd = mulberry(20);
+  const segs = [], leaves = [], eyes = [], prims = [];
+  const trunkX = u => 0.011 * Math.sin(u * 2.6 + 0.7) - 0.0045;
+  const bez = (s, t) => {
+    const a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
+    return [a * s.p0[0] + b * s.p1[0] + c * s.p2[0], a * s.p0[1] + b * s.p1[1] + c * s.p2[1]];
+  };
+  const bezTan = (s, t) => {
+    const x = 2 * (1 - t) * (s.p1[0] - s.p0[0]) + 2 * t * (s.p2[0] - s.p1[0]);
+    const y = 2 * (1 - t) * (s.p1[1] - s.p0[1]) + 2 * t * (s.p2[1] - s.p1[1]);
+    const l = Math.hypot(x, y) || 1; return [x / l, y / l];
+  };
+
+  function makeLeaf(seg, s, ux, uy, ang, appear) {
+    const turn0 = T.turn0 + (1 - uy) * 1.6 + rnd() * 2.4;
+    const turnD = 4.5 + rnd() * 1.5;
+    const fall0 = turn0 + turnD + 0.2 + rnd() * 3.2;
+    const fallD = 3.4 + rnd() * 2.4;
+    return {
+      seg, s, ux, uy, ang, appear,
+      r: 0.75 + rnd() * 0.5, ph: rnd() * TAU, fq: 2.4 + rnd() * 2.4, v: 0.9 + rnd() * 0.2,
+      turn0, turnD, fall0, fallD, landT: fall0 + fallD,
+      dx: ((rnd() + rnd() + rnd()) / 3 - 0.5) * 0.95,
+      ly: rnd(), sw: 2 + rnd() * 2.5, spin: (rnd() - 0.5) * 5, rest: (rnd() - 0.5) * 5
+    };
+  }
+
+  for (let i = 0; i < 30; i++) eyes.push({ u: 0.03 + rnd() * 0.88, off: (rnd() - 0.5) * 0.5, sz: 0.5 + rnd() * 0.9 });
+
+  // three stout branches are set aside: the wise owl's, the white owl's, and the one where they meet
+  let owlSeg = null, whiteSeg = null, meetSeg = null;
+  const N = 22;
+  for (let i = 0; i < N; i++) {
+    const f = i / (N - 1);
+    const u = 0.30 + 0.68 * Math.pow(f, 0.92) + (rnd() - 0.5) * 0.015;
+    let side = (i % 2 ? 1 : -1) * (rnd() < 0.12 ? -1 : 1);
+    const crown = clamp((u - 0.22) / 0.8);
+    let L = 0.03 + 0.19 * Math.pow(Math.sin(Math.PI * crown), 0.8) * (0.85 + rnd() * 0.3);
+    let ang = lerp(1.05, 0.42, f) + (rnd() - 0.5) * 0.25;
+    const kind = i === 1 ? 'brown' : i === 2 ? 'white' : i === 16 ? 'meet' : null;
+    if (kind === 'brown') { side = 1; L = 0.26; ang = 1.42; }
+    if (kind === 'white') { side = -1; L = 0.2; ang = 1.38; }
+    if (kind === 'meet') { side = -1; L = 0.22; ang = 1.36; }
+    const x0 = trunkX(u), y0 = u;
+    const t0 = u * 0.85;
+    const seg = {
+      p0: [x0, y0],
+      p1: [x0 + side * Math.sin(ang) * L * 0.8, y0 + Math.cos(ang) * L * 0.12],
+      p2: [x0 + side * Math.sin(ang) * L, y0 + Math.cos(ang) * L * 0.92],
+      t0, span: Math.min(0.22 + rnd() * 0.05, 1 - t0 - 0.001),
+      w0: kind === 'brown' ? 0.0105 : kind === 'white' ? 0.0095 : kind === 'meet' ? 0.0082 : 0.0075 * (1 - 0.35 * f),
+      w1: kind ? 0.0043 : 0.0026, twig: false
+    };
+    segs.push(seg);
+    if (kind === 'brown') owlSeg = seg; else if (kind === 'white') whiteSeg = seg; else if (kind === 'meet') meetSeg = seg;
+    else prims.push({ seg, u });
+    eyes.push({ u, off: side * 0.22, sz: 1.25 });
+
+    for (const s of [0.42, 0.62, 0.8, 1, 1]) {
+      const pt = bez(seg, s);
+      leaves.push(makeLeaf(seg, s, pt[0], pt[1], (rnd() - 0.5) * 2.2, 0));
+    }
+
+    const sList = kind ? [0.18, 0.3, 0.95] : [0.38, 0.6, 0.8];
+    for (let k = 0; k < 3; k++) {
+      const sa = Math.min(1, sList[k] + (rnd() - 0.5) * 0.08);
+      const pt = bez(seg, sa), tg = bezTan(seg, sa);
+      const rot = (0.55 + rnd() * 0.5) * (k % 2 ? 1 : -1) * (side > 0 ? 1 : -1);
+      let dx = tg[0] * Math.cos(rot) - tg[1] * Math.sin(rot);
+      let dy = tg[0] * Math.sin(rot) + tg[1] * Math.cos(rot) + 0.3;
+      const dl = Math.hypot(dx, dy); dx /= dl; dy /= dl;
+      const len = L * (0.42 - 0.14 * sa + rnd() * 0.1);
+      const tt0 = seg.t0 + seg.span * sa;
+      const tw = {
+        p0: pt,
+        p1: [pt[0] + dx * len * 0.55, pt[1] + dy * len * 0.55 + len * 0.1],
+        p2: [pt[0] + dx * len, pt[1] + dy * len],
+        t0: tt0, span: Math.max(0.02, Math.min(0.16, 1 - tt0 - 0.001)),
+        w0: 0.0032, w1: 0.0012, twig: true
+      };
+      segs.push(tw);
+      for (const s of [0.5, 0.8, 1, 1]) {
+        const p = bez(tw, s);
+        leaves.push(makeLeaf(tw, s, p[0], p[1], (rnd() - 0.5) * 2.2, 0));
+      }
+    }
+  }
+  const topAngles = [Math.PI - 1.1, Math.PI + 1.1, Math.PI - 0.5, Math.PI + 0.5, Math.PI, Math.PI + 0.25];
+  topAngles.forEach((a, i) => leaves.push(makeLeaf(null, 1, trunkX(1), 1, a, 1.5 + i * 0.9)));
+  const byLy = leaves.slice().sort((a, b) => a.ly - b.ly);
+
+  const motes = Array.from({ length: 28 }, () => ({ x: rnd(), y: rnd(), s: 0.02 + rnd() * 0.04, r: 0.6 + rnd() * 1.6, ph: rnd() * TAU }));
+  // stars sit on a big disc that turns around a pole; a few are brighter
+  const stars = Array.from({ length: 900 }, (_, i) => {
+    const big = i < 50;
+    return {
+      a: rnd() * TAU, rr: Math.sqrt(rnd()),
+      sz: big ? 1.6 + rnd() * 0.9 : 0.5 + Math.pow(rnd(), 4) * 1.4,
+      br: big ? 0.9 + rnd() * 0.1 : 0.4 + rnd() * 0.6,
+      tr: 0.008 + rnd() * 0.022, ph: rnd() * TAU, big
+    };
+  });
+
+  // an outer galaxy layer, blue-violet and faint. The first 24 stars are "seeds": the ones the hearts become.
+  const GAL_TINT = [[150,150,255],[175,140,255],[135,175,255],[195,165,255]];
+  const gal = Array.from({ length: 340 }, (_, i) => {
+    const seed = i < 24, arm = i % 2, rr = seed ? 0.18 + rnd() * 0.8 : Math.pow(rnd(), 0.65);
+    return {
+      a: arm * Math.PI + 3.2 * Math.log(1 + rr * 3.5) + (rnd() - 0.5) * 0.55 * (1 - rr * 0.4), rr,
+      sz: seed ? 1.5 + rnd() * 0.7 : 0.4 + rnd() * 0.8, br: seed ? 0.95 : 0.3 + rnd() * 0.45,
+      ph: rnd() * TAU, tint: GAL_TINT[i % 4], seed
+    };
+  });
+  // a heart drawn by stars: an outline plus a scatter inside, each with its own moment to appear
+  const HEART = [], HN = 46;
+  for (let k = 0; k < HN; k++) {
+    const th = TAU * k / HN;
+    HEART.push({ x: 16 * Math.pow(Math.sin(th), 3), y: 13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th),
+      key: Math.abs(th - Math.PI) / Math.PI, sz: 1.7 + rnd() * 0.9, ph: rnd() * TAU, ring: true });
+  }
+  for (let k = 0; k < 22; k++) {
+    const th = TAU * k / 22 + 0.13, sc2 = 0.42 + rnd() * 0.3;
+    HEART.push({ x: sc2 * 16 * Math.pow(Math.sin(th), 3), y: sc2 * (13 * Math.cos(th) - 5 * Math.cos(2 * th) - 2 * Math.cos(3 * th) - Math.cos(4 * th)),
+      key: 0.25 + Math.abs(th - Math.PI) / Math.PI * 0.75, sz: 1 + rnd() * 0.8, ph: rnd() * TAU, ring: false });
+  }
+
+  // ---------- Leaf shape ----------
+  const LEAF = new Path2D();
+  LEAF.moveTo(0, 0);
+  LEAF.bezierCurveTo(1.3, 0.2, 1.2, 1.7, 0, 2.1);
+  LEAF.bezierCurveTo(-1.2, 1.7, -1.3, 0.2, 0, 0);
+  LEAF.closePath();
+  const VEIN = new Path2D();
+  VEIN.moveTo(0, 0.1); VEIN.lineTo(0, 1.85);
+
+  let W = 0, H = 0, dpr = 1, S = 500, gy = 0, cx = 0, band = 0;
+
+  // ---------- Sky: constant counterclockwise turning, shooting star, advice star ----------
+  function spinI(x, d = 5) {                           // an eased spin: ramps in over d seconds, then keeps going
+    if (x <= 0) return 0;
+    const xn = clamp(x / d);
+    return xn < 1 ? d * (xn * xn * xn - xn * xn * xn * xn / 2) : d * 0.5 + (x - d);
+  }
+  // counterclockwise the whole time; faster after the kiss, calmer again once the field zooms out
+  const skyTh = t => -SKY_W * t - (fin ? SKY_B * (spinI(t - fin.tK) - 0.8 * spinI(t - fin.z0, fin.z1 - fin.z0)) : 0);
+  // at the end of the heart the whole field rushes toward the viewer
+  const zoomK = t => fin ? Math.exp(Math.log(8) * Math.pow(clamp((t - fin.tF0) / (fin.tF1 - fin.tF0)), 2.3)) : 1;
+  function skyGeom(t = 0) {
+    const zp = fin ? smooth(fin.z0, fin.z1, t) : 0;   // near the very end the whole field pulls back and shrinks
+    const K = zoomK(t);
+    const p0x = W * 0.68, p0y = H * 0.13;
+    return {
+      pxs: lerp(p0x, W * 0.5, zp), pys: lerp(p0y, H * 0.42, zp), p0x, p0y, zp, K, scale: lerp(1, 0.3, zp) * K, th: skyTh(t),
+      Rmax: Math.hypot(Math.max(p0x, W - p0x), Math.max(H - p0y, p0y))
+    };
+  }
+  function starPos(s, t, g) {
+    const th = s.a + g.th, r = s.rr * g.Rmax * g.scale;
+    return { x: g.pxs + r * Math.cos(th), y: g.pys + r * Math.sin(th), th, r };
+  }
+  function drawStars(t, cullY, gain) {
+    const g = skyGeom(t);
+    const sa = smooth(0.2, 2.5, t) * (0.85 + 0.15 * smooth(14, 30, t)) * gain;
+    const boost = fin ? smooth(fin.tK, fin.tK + 5, t) * (1 - 0.6 * g.zp) : 0;
+    const tk = (0.6 + 1.4 * Math.min(1, sa)) * (1 + 1.5 * boost) * (0.4 + 0.6 * g.scale);
+    const wk = clamp((g.K - 1) / 2), szf = lerp(1, 0.55, g.zp) * Math.pow(g.K, 0.45);
+    ctx.lineCap = 'round';
+    for (const s of stars) {
+      const p = starPos(s, t, g);
+      if (p.y > cullY || p.y < -4 || p.x < -4 || p.x > W + 4) continue;
+      const al = Math.min(1, sa * s.br * (0.75 + 0.25 * Math.sin(t * 1.6 + s.ph)) * (1 - smooth(0.82, 1, s.rr)));
+      ctx.strokeStyle = `rgba(232,238,255,${al * 0.45 * (1 - wk)})`; ctx.lineWidth = s.sz * 0.7 * szf;
+      if (wk < 0.95) { ctx.beginPath(); ctx.arc(g.pxs, g.pys, p.r, p.th, p.th + s.tr * tk); ctx.stroke(); }
+      if (s.big) {
+        const rg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 7 * szf);
+        rg.addColorStop(0, `rgba(240,245,255,${al * 0.35})`); rg.addColorStop(1, 'rgba(240,245,255,0)');
+        ctx.fillStyle = rg; ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
+      }
+      ctx.fillStyle = `rgba(246,248,255,${al})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, s.sz * 0.7 * szf, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = `rgba(255,250,235,${Math.min(1, sa) * 0.9})`;
+    ctx.beginPath(); ctx.arc(g.pxs, g.pys, 2 * szf, 0, TAU); ctx.fill();
+  }
+  function pickStar(t) {
+    const g = skyGeom(t), c = [];
+    for (const s of stars) {
+      if (s.sz < 0.9) continue;
+      const p = starPos(s, t, g);
+      if (p.y > H * 0.06 && p.y < gy * 0.58 && p.x > W * 0.12 && p.x < W * 0.88) c.push(s);
+    }
+    return c.length ? c[Math.floor(Math.random() * c.length)] : stars[0];
+  }
+  const starNow = (ad, t) => starPos(ad.star, t, skyGeom(t));
+  function shootHead(ad, t) {
+    const tp = starNow(ad, t), pp = clamp((t - ad.c0) / 1.5), e = 1 - Math.pow(1 - pp, 1.8);
+    return { x: ad.s0.x + (tp.x - ad.s0.x) * e, y: ad.s0.y + (tp.y - ad.s0.y) * e, tp, pp };
+  }
+  function drawShoot(ad, t) {
+    const p = (t - ad.c0) / 1.5;
+    if (p <= 0 || p > 1.3) return;
+    const h = shootHead(ad, t);
+    const dx = h.tp.x - ad.s0.x, dy = h.tp.y - ad.s0.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+    const tail = 120 * (1 - 0.4 * h.pp), al = smooth(0, 0.08, p) * (1 - smooth(1, 1.3, p));
+    const g = ctx.createLinearGradient(h.x, h.y, h.x - ux * tail, h.y - uy * tail);
+    g.addColorStop(0, `rgba(255,250,236,${0.95 * al})`); g.addColorStop(1, 'rgba(255,250,236,0)');
+    ctx.strokeStyle = g; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(h.x - ux * tail, h.y - uy * tail); ctx.stroke();
+    ctx.fillStyle = `rgba(255,252,240,${al})`; ctx.beginPath(); ctx.arc(h.x, h.y, 2.4, 0, TAU); ctx.fill();
+  }
+  function drawSparkle(ad, t) {
+    const k = smooth(ad.c0 + 1.3, ad.c0 + 2.0, t) * (1 - smooth(ad.fadeStart, ad.end, t));
+    if (k < 0.01) return;
+    const p = starNow(ad, t);
+    const flash = 1 + 1.2 * Math.max(0, 1 - (t - (ad.c0 + 1.45)) / 0.7);
+    const R = 15 * (0.85 + 0.15 * Math.sin(t * 2.2)) * flash;
+    const rg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, R * 1.7);
+    rg.addColorStop(0, `rgba(255,246,222,${0.55 * k})`); rg.addColorStop(1, 'rgba(255,246,222,0)');
+    ctx.fillStyle = rg; ctx.fillRect(p.x - R * 1.7, p.y - R * 1.7, R * 3.4, R * 3.4);
+    ctx.strokeStyle = `rgba(255,248,232,${0.85 * k})`; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(p.x - R, p.y); ctx.lineTo(p.x + R, p.y); ctx.moveTo(p.x, p.y - R); ctx.lineTo(p.x, p.y + R); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,248,232,${0.45 * k})`;
+    ctx.beginPath(); ctx.moveTo(p.x - R * 0.55, p.y - R * 0.55); ctx.lineTo(p.x + R * 0.55, p.y + R * 0.55);
+    ctx.moveTo(p.x + R * 0.55, p.y - R * 0.55); ctx.lineTo(p.x - R * 0.55, p.y + R * 0.55); ctx.stroke();
+    ctx.fillStyle = `rgba(255,252,242,${k})`; ctx.beginPath(); ctx.arc(p.x, p.y, 2.4, 0, TAU); ctx.fill();
+  }
+
+  // ---------- Owls ----------
+  const OWL_S = 0.45;
+  const BROWN = {
+    bodyTop: '#9a866b', bodyBot: '#6e5d4a', wing: '#5f5041', wing2: '#75634f', wingLine: 'rgba(200,180,150,.28)',
+    belly: '#d8c9ab', chev: 'rgba(91,74,58,.75)', head0: '#a8947a', head1: '#8a7861', tuft: '#7d6b55',
+    rim: '#6f5d48', disc: '#cdbea0', lid: '#a99a7d', outline: 'rgba(30,22,16,.55)',
+    beakU: '#e3ad45', beakL: '#c98f36', feet: '#d3ad5e', toe: '#b78f45', iris0: '#ffe860', iris1: '#f2b400', flecks: null
+  };
+  const WHITE = {
+    bodyTop: '#f6f4ee', bodyBot: '#cbc7bb', wing: '#dedacf', wing2: '#ece9df', wingLine: 'rgba(120,110,95,.25)',
+    belly: '#fffdf8', chev: 'rgba(150,140,125,.55)', head0: '#fdfcf8', head1: '#e8e4da', tuft: null,
+    rim: '#cdc7b8', disc: '#ffffff', lid: '#efece4', outline: 'rgba(80,72,62,.45)',
+    beakU: '#5b5148', beakL: '#453d36', feet: '#eadfc4', toe: '#bfae8a', iris0: '#ffd84a', iris1: '#f0a800',
+    flecks: [[-0.16,-0.5,0.014],[0.12,-0.56,0.012],[-0.06,-0.42,0.011],[0.18,-0.42,0.013],[-0.2,-0.32,0.012],[0.06,-0.34,0.01],[-0.12,-0.2,0.012],[0.16,-0.24,0.011]]
+  };
+  const HEAD = [[0,[0,0]],[T.owl + 4.8,[0,0]],[T.owl + 5.7,[0.2,0.8]],[T.owl + 6.7,[0.2,0.8]],[T.owl + 7.5,[0,0]],[9999,[0,0]]];
+  // little life between the big moments: each owl now and then opens its wings, or preens
+  const actions = [];
+  const addAct = (id, type, t0, dur, side) => actions.push({ id, type, t0, dur, side, tf: t0 + dur * 0.6, fx: null, fy: null, fo: 0 });
+  addAct('b', 'stretch', 23.3, 3.2, 1);               // the wise owl stretches as it settles in
+  addAct('w', 'preen', 27.2, 3.6, -1);                // the white owl tidies her feathers
+  addAct('w', 'stretch', 37.2, 3.2, 1);
+  for (let k = 0; k < 80; k++) {                       // and after that, in turn, while the night is quiet
+    const t0 = 44 + k * 6.4, m = k % 4;
+    if (m === 0) addAct('b', 'preen', t0, 3.4, k % 8 === 0 ? 1 : -1);
+    else if (m === 1) addAct('w', 'stretch', t0, 3.2, 1);
+    else if (m === 2) addAct('b', 'stretch', t0, 3.2, 1);
+    else addAct('w', 'preen', t0, 3.4, k % 8 === 3 ? -1 : 1);
+  }
+  function actionAt(id, t) {
+    let supp = fin ? smooth(fin.f0, fin.f0 + 0.4, t) : 0;   // both stop when the climb begins
+    const ad = advs[advs.length - 1];
+    if (id === 'b' && ad) supp = Math.max(supp, smooth(ad.c0 - 0.01, ad.c0 + 0.5, t) * (1 - smooth(ad.end, ad.end + 0.8, t)));
+    for (const a of actions) {
+      if (a.id !== id || t < a.t0 || t > a.t0 + a.dur) continue;
+      return { a, type: a.type, side: a.side, w: smooth(a.t0, a.t0 + 0.7, t) * (1 - smooth(a.t0 + a.dur - 0.7, a.t0 + a.dur, t)) * (1 - supp) };
+    }
+    return null;
+  }
+  function drawFeather(x, y, rot, size, a, col) {     // a single loose feather drifting down
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = a; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.ellipse(0, 0, size * 0.28, size, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,50,40,.35)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(0, size * 1.2); ctx.stroke();
+    ctx.restore();
+  }
+  function makeBlinks(start) {
+    const a = [start, start + 2.3]; let bt = start + 2.3, k = 0;
+    while (bt < 900) { bt += 3.1 + (k++ % 3) * 0.8; a.push(bt); }
+    return a;
+  }
+  const owls = [
+    { id: 'w', k: 0.105, pal: WHITE, appear: T.owl2, blinks: makeBlinks(T.owl2 + 3.1), restDelay: 0.6, ts: 1,  seed: 1.7, isBrown: false, hit: null, home: { seg: whiteSeg, s: 0.5 } },
+    { id: 'b', k: 0.145, pal: BROWN, appear: T.owl,  blinks: makeBlinks(T.owl + 2.6),  restDelay: 0,   ts: -1, seed: 0,   isBrown: true,  hit: null, home: { seg: owlSeg, s: OWL_S } }
+  ];
+
+  function wake(t) {                                   // a question, or the start of the finale, wakes the owls
+    const a = advs[advs.length - 1];
+    const w1 = a ? smooth(a.c0, a.c0 + 0.5, t) * (1 - smooth(a.rest || a.end + 1, (a.rest || a.end + 1) + 2.5, t)) : 0;
+    const w2 = fin ? smooth(fin.f0, fin.f0 + 0.4, t) : 0;
+    return Math.max(w1, w2);
+  }
+  function eyeOpen(t, times, restDelay, aw = 0) {
+    let v = 1;
+    for (let i = 0; i < times.length; i++) {
+      const d = t - times[i];
+      if (d < 0) break;
+      if (d < 0.3) { v = d < 0.11 ? 1 - d / 0.11 : (d - 0.11) / 0.19; break; }
+    }
+    const closed = smooth(T.rest + restDelay, T.rest + restDelay + 2.2, t) * (1 - Math.max(wake(t), aw));   // after the last leaf, they rest
+    v = Math.min(v, 1 - closed);
+    if (fin) v = Math.min(v, 1 - smooth(fin.tK - 0.6, fin.tK - 0.2, t));                       // eyes close for the kiss
+    return v;
+  }
+
+  function leaf(x, y, rot, r, sx, ky, fill, vein) {
+    const c = Math.cos(rot), s = Math.sin(rot);
+    ctx.setTransform(dpr * c * sx * r, dpr * ky * s * sx * r, -dpr * s * r, dpr * ky * c * r, dpr * x, dpr * y);
+    ctx.fillStyle = fill;
+    ctx.fill(LEAF);
+    if (vein) ctx.stroke(VEIN);
+  }
+
+  function drawCrutch(a, x0, y0, yb) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.save(); ctx.globalAlpha = a; ctx.lineCap = 'round';
+    const lean = S * 0.016, bx = x0 + lean, cxp = x0 + lean * 0.2 - 4, cyp = (y0 + y0 + 3 + yb) / 3 + 10;
+    const q = t => {
+      const u = 1 - t;
+      return [u * u * x0 + 2 * u * t * cxp + t * t * bx, u * u * (y0 + 3) + 2 * u * t * cyp + t * t * yb];
+    };
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(bx, yb + 1, 7, 1.8, 0, 0, TAU); ctx.fill();
+    const pole = (w, col) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0 + 3); ctx.quadraticCurveTo(cxp, cyp, bx, yb); ctx.stroke(); };
+    pole(3.6, 'rgba(40,30,20,.7)'); pole(2.2, '#c2a878');
+    const pad = (w, col) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0 - 11, y0 + 4); ctx.quadraticCurveTo(x0, y0 + 11, x0 + 11, y0 + 4); ctx.stroke(); };
+    pad(3.6, 'rgba(40,30,20,.7)'); pad(2.2, '#c2a878');
+    const h = q(0.55);
+    const bar = (w, col) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(h[0] - 9, h[1] + 2); ctx.lineTo(h[0] + 9, h[1] - 2); ctx.stroke(); };
+    bar(3.4, 'rgba(40,30,20,.7)'); bar(2.2, '#c2a878');
+    ctx.restore();
+  }
+
+  // one owl figure, either colour. turn: -1..1 turns the face toward a partner (profile at ±1) for the kiss
+  function drawOwlFig(t, px, py, o, sp) {
+    const pal = sp.pal, tu = sp.turn, ta = Math.abs(tu), bo = sp.bo;
+    const ell = (x, y, rx, ry, r = 0) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, r, 0, TAU); };
+    const bob = (1 + 0.012 * Math.sin(t * 1.8 + sp.seed)) * sp.sy;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.save();
+    ctx.globalAlpha = sp.a;
+    ctx.translate(px, py - (1 - sp.a) * 8);
+    if (sp.rot) ctx.rotate(sp.rot);
+    ctx.scale(o * (sp.sx || 1), o * bob);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    const drawWing = (sx, open, raise) => {           // a fan of feathers from the shoulder
+      ctx.save(); ctx.translate(sx * 0.2, -0.45); ctx.lineWidth = 0.011; ctx.strokeStyle = pal.outline;
+      for (let i = 0; i < 6; i++) {
+        const f = i / 5, len = (0.3 + 0.2 * f) * (0.55 + 0.45 * open);
+        ctx.save(); ctx.rotate(-sx * (raise + (f - 0.5) * 0.95 * open));
+        ctx.fillStyle = i % 2 ? pal.wing : pal.wing2;
+        ell(sx * len / 2, 0, len / 2, 0.055 + 0.02 * f); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.restore();
+    };
+    const wopen = sp.fly ? 0.9 : (sp.stretch || 0);
+    if (sp.fly) {                                      // wings open while hopping between branches
+      const fl = 0.5 + 0.5 * Math.sin(sp.fly);
+      drawWing(-1, 0.9, 0.1 + 0.95 * fl); drawWing(1, 0.9, 0.1 + 0.95 * fl);
+    } else if (wopen > 0.02) {                         // a slow stretch: both wings open wide and settle
+      const r = 0.2 + 0.55 * wopen + 0.1 * wopen * Math.sin(sp.wph);
+      drawWing(-1, wopen, r); drawWing(1, wopen, r);
+    } else if (sp.pw > 0.02) {                         // preening: the wing on that side lifts a little toward the beak
+      drawWing(sp.pside, 0.4 * sp.pw, 0.1 + 0.15 * sp.pw);
+    }
+
+    // body
+    const bg = ctx.createLinearGradient(0, -0.75, 0, 0);
+    bg.addColorStop(0, pal.bodyTop); bg.addColorStop(1, pal.bodyBot);
+    ctx.fillStyle = bg; ell(0, -0.34, 0.29, 0.36); ctx.fill();
+    ctx.strokeStyle = pal.outline; ctx.lineWidth = 0.014; ctx.stroke();
+    ctx.fillStyle = pal.wing; ctx.globalAlpha = sp.a * (1 - 0.85 * wopen);   // the folded wings fade as the real ones open
+    ell(-0.2, -0.33, 0.1, 0.28, 0.12); ctx.fill();
+    ell(0.2, -0.33, 0.1, 0.28, -0.12); ctx.fill();
+    ctx.globalAlpha = sp.a;
+    ctx.strokeStyle = pal.wingLine; ctx.lineWidth = 0.012;
+    for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) {
+      ctx.beginPath(); ctx.moveTo(sx * 0.17, -0.46 + i * 0.09); ctx.lineTo(sx * 0.24, -0.42 + i * 0.09); ctx.stroke();
+    }
+    ctx.fillStyle = pal.belly; ell(0, -0.27, 0.165, 0.25); ctx.fill();
+    ctx.strokeStyle = pal.chev; ctx.lineWidth = 0.014;
+    for (let i = 0; i < 3; i++) {
+      const y = -0.47 + i * 0.07;
+      ctx.beginPath(); ctx.moveTo(-0.07, y - 0.02); ctx.lineTo(0, y + 0.02); ctx.lineTo(0.07, y - 0.02); ctx.stroke();
+    }
+    if (pal.flecks) { ctx.fillStyle = 'rgba(140,130,115,.4)'; for (const f of pal.flecks) { ctx.beginPath(); ctx.arc(f[0], f[1], f[2], 0, TAU); ctx.fill(); } }
+    if (sp.drawer) {                                   // a small drawer in the chest, slightly open, warm light inside
+      const gl = 0.55 + 0.25 * Math.sin(t * 1.2) + 0.5 * bo;
+      const dg = ctx.createRadialGradient(0, -0.2, 0, 0, -0.2, 0.2);
+      dg.addColorStop(0, `rgba(255,205,120,${0.55 * gl})`); dg.addColorStop(1, 'rgba(255,205,120,0)');
+      ctx.fillStyle = dg; ctx.fillRect(-0.22, -0.4, 0.44, 0.44);
+      ctx.fillStyle = '#ffd27a'; ctx.fillRect(-0.066, -0.216, 0.132, 0.016);
+      ctx.fillStyle = '#8a6a3f'; ctx.fillRect(-0.07, -0.2, 0.14, 0.07);
+      ctx.strokeStyle = '#3d2f22'; ctx.lineWidth = 0.008; ctx.strokeRect(-0.07, -0.2, 0.14, 0.07);
+      ctx.fillStyle = '#e6c36a'; ctx.beginPath(); ctx.arc(0, -0.165, 0.012, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = pal.feet;
+    ell(-0.1, -0.02, 0.055, 0.03); ctx.fill(); ell(0.1, -0.02, 0.055, 0.03); ctx.fill();
+    ctx.strokeStyle = pal.toe; ctx.lineWidth = 0.016;
+    for (const sx of [-1, 1]) for (const k of [-1, 0, 1]) {
+      ctx.beginPath(); ctx.moveTo(sx * 0.1 + k * 0.03, -0.02); ctx.lineTo(sx * 0.1 + k * 0.04, 0.014); ctx.stroke();
+    }
+
+    // head: tilts on the neck, can lean toward a partner, and turns to profile for the kiss
+    ctx.save();
+    ctx.translate(sp.hdx, sp.hdy);
+    ctx.translate(0, -0.58); ctx.rotate(sp.tilt); ctx.translate(0, 0.58);
+    if (pal.tuft) {
+      ctx.fillStyle = pal.tuft; const sh = tu * 0.05;
+      for (const sx of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(sx * 0.28 + sh, -0.8); ctx.lineTo(sx * 0.25 + sh, -1.0); ctx.lineTo(sx * 0.1 + sh, -0.9); ctx.closePath(); ctx.fill();
+      }
+    }
+    const hg = ctx.createLinearGradient(0, -0.92, 0, -0.5);
+    hg.addColorStop(0, pal.head0); hg.addColorStop(1, pal.head1);
+    ctx.fillStyle = hg; ell(tu * 0.02, -0.7, 0.31 * (1 - 0.06 * ta), 0.215); ctx.fill();
+    ctx.strokeStyle = pal.outline; ctx.lineWidth = 0.014; ctx.stroke();
+    const lx = sp.look * 0.02;
+    const dcx = sx => tu * 0.19 + sx * 0.13 * (1 - 0.9 * ta) + lx;
+    ctx.fillStyle = pal.rim;
+    for (const sx of [-1, 1]) { ell(dcx(sx), -0.7, 0.17 * (1 - 0.3 * ta), 0.17); ctx.fill(); }
+    ctx.fillStyle = pal.disc;
+    for (const sx of [-1, 1]) { ell(dcx(sx), -0.7, 0.16 * (1 - 0.3 * ta), 0.16); ctx.fill(); }
+
+    const er0 = 0.1, c = 1 - sp.open;
+    for (const sx of (tu >= 0 ? [-1, 1] : [1, -1])) {  // far eye first, near eye on top
+      const far = tu !== 0 && sx === (tu > 0 ? -1 : 1);
+      const er = er0 * (far ? 1 - 0.5 * ta : 1 - 0.08 * ta), kk = er / er0;
+      const ex = tu * 0.2 + sx * 0.13 * (1 - 0.9 * ta) + lx * 1.4, ey = -0.7;
+      const eg = ctx.createRadialGradient(ex, ey - 0.02, 0.01, ex, ey, er);
+      eg.addColorStop(0, pal.iris0); eg.addColorStop(1, pal.iris1);
+      ctx.fillStyle = eg; ell(ex, ey, er, er); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,80,0,.7)'; ctx.lineWidth = 0.012; ctx.stroke();
+      const pxo = sp.look * 0.03 + tu * 0.03, pyo = sp.lookY * 0.03;
+      ctx.fillStyle = '#0d0a08'; ell(ex + pxo, ey + pyo, 0.05 * kk, 0.05 * kk); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ell(ex + pxo + 0.018, ey + pyo - 0.02, 0.015 * kk, 0.015 * kk); ctx.fill();
+      if (c > 0.01) {
+        ctx.save(); ell(ex, ey, er, er); ctx.clip();
+        ctx.fillStyle = pal.lid;
+        const topY = ey - er + c * 2 * er * 0.62;
+        const botY = ey + er - c * 2 * er * 0.38;
+        ctx.fillRect(ex - er - 0.01, ey - er - 0.02, 2 * er + 0.02, topY - (ey - er - 0.02));
+        ctx.fillRect(ex - er - 0.01, botY, 2 * er + 0.02, ey + er + 0.02 - botY);
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(60,45,30,.9)'; ctx.lineWidth = 0.014 + 0.012 * c;
+        const hl = Math.sqrt(Math.max(0, er * er - (topY - ey) * (topY - ey)));
+        ctx.beginPath(); ctx.moveTo(ex - hl, topY); ctx.lineTo(ex + hl, topY); ctx.stroke();
+      }
+    }
+
+    const bk = Math.max(bo, sp.nib || 0);              // the beak also nibbles while preening
+    const bx = tu * 0.30 + lx * 1.4;                   // beak: points down from the front, sideways in profile
+    ctx.save(); ctx.translate(bx, -0.675); ctx.rotate(-tu * (Math.PI / 2) * 0.85);
+    if (bk > 0.03) {
+      ctx.fillStyle = '#2d1f14'; ctx.beginPath();
+      ctx.moveTo(-0.03, 0.02); ctx.lineTo(0.03, 0.02); ctx.lineTo(0, 0.06 + 0.05 * bk); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = pal.beakL; ctx.beginPath();
+    ctx.moveTo(-0.026, 0.027); ctx.lineTo(0.026, 0.027); ctx.lineTo(0, 0.063 + 0.055 * bk); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = pal.beakU; ctx.beginPath();
+    ctx.moveTo(-0.036, 0); ctx.lineTo(0.036, 0); ctx.lineTo(0, 0.075); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.restore();   // head
+    ctx.restore();
+
+    if (sp.isBrown) {                                  // where spoken words leave the beak
+      const dx = bx, dy = -0.59 + 0.02 * bo + 0.58;
+      const rx = dx * Math.cos(sp.tilt) - dy * Math.sin(sp.tilt);
+      const ry = dx * Math.sin(sp.tilt) + dy * Math.cos(sp.tilt) - 0.58;
+      beak.x = px + (rx + sp.hdx) * o; beak.y = py + (ry + sp.hdy) * o * bob;
+    }
+  }
+
+  // where the tip of the beak sits (head-local units) when the face is in full profile and tilted for the kiss
+  function tipLocal(ts) {
+    const rot = -ts * (Math.PI / 2) * 0.85, bxl = ts * 0.30;
+    const x = bxl - Math.sin(rot) * 0.075, y = -0.675 + Math.cos(rot) * 0.075;
+    const th = ts * 0.2, vx = x, vy = y + 0.58;
+    return { x: vx * Math.cos(th) - vy * Math.sin(th), y: vx * Math.sin(th) + vy * Math.cos(th) - 0.58 };
+  }
+
+  // ---------- The last leaf: it hangs where a full stop would be, then lets go ----------
+  const leafCycles = [];
+  const resetLeaves = () => { leafCycles.length = 0; leafCycles.push({ a: T.leafA, f: T.leafF, D: T.leafD, lx: 0.09, ly: 0.42 }); };
+  resetLeaves();
+  function leafStateFor(c, t) {
+    if (t < c.a) return null;
+    const a = smooth(c.a, c.a + 1.2, t);
+    const p = clamp((t - c.f) / c.D);
+    const x0 = periodPos.x, y0 = periodPos.y, r = periodPos.r;
+    if (p <= 0) {
+      return { x: x0, y: y0, rot: 0.2 + Math.sin(t * 2.1) * 0.18, sx: 1 - 0.2 * (0.5 + 0.5 * Math.sin(t * 1.7)), ky: 1, r, a, p: 0, flat: 0 };
+    }
+    const lx = cx + c.lx * S, ly = gy + 8 + band * c.ly;
+    const ye = p * (0.55 + 0.45 * p), xe = smooth(0, 1, p) * 0.9 + p * 0.1;
+    const x = x0 + (lx - x0) * xe + Math.sin(p * Math.PI * 3.4) * S * 0.05 * (1 - p) * Math.min(1, p * 5);
+    const y = y0 + (ly - y0) * ye;
+    const flat = smooth(0.85, 1, p);
+    let rot = 0.2 + Math.sin(p * 7) * 0.9 * (1 - p) + p * 1.5 * (1 - flat);
+    rot = lerp(rot, 0.6, flat);
+    const tum = Math.abs(Math.cos(p * 8)) * 0.8 + 0.2;
+    const sx = lerp(lerp(0.85, tum, smooth(0, 0.15, p)), 1, flat);
+    return { x, y, rot, sx, ky: lerp(1, 0.32, flat), r: r * (1 + 0.4 * flat), a, p, flat };
+  }
+  function cutLeaves(t) {                              // when the words leave, a leaf that is still hanging lets go now
+    for (let i = leafCycles.length - 1; i > 0; i--) if (leafCycles[i].a > t) leafCycles.splice(i, 1);
+    for (const c of leafCycles) if (c.a <= t && c.f > t) c.f = t;
+  }
+  function drawLeaf(L, latest) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const hal = L.a * (1 - L.flat) + (latest ? 0.22 * L.flat * (0.7 + 0.3 * Math.sin(performance.now() / 900)) : 0);
+    if (hal > 0.01) {
+      const rg = ctx.createRadialGradient(L.x, L.y + L.r, 0, L.x, L.y + L.r, L.r * 5);
+      rg.addColorStop(0, `rgba(255,205,120,${0.32 * hal})`); rg.addColorStop(1, 'rgba(255,205,120,0)');
+      ctx.fillStyle = rg; ctx.fillRect(L.x - L.r * 5, L.y - L.r * 4, L.r * 10, L.r * 10);
+    }
+    ctx.globalAlpha = L.a;
+    leaf(L.x, L.y, L.rot, L.r, L.sx, L.ky, rgbs(mixc([244, 188, 74], [204, 171, 120], smooth(0.3, 1, L.p))), false);
+    ctx.globalAlpha = 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // breath: soft vapor follows every word out of the beak
+  function drawVapor(t) {
+    if (!speeches.length) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const sc = S / 532;
+    for (const sp of speeches) for (const w of sp.words) {
+      if (!w.c) continue;
+      for (let k = 0; k < 3; k++) {
+        const age = t - w.start - k * 0.14;
+        if (age <= 0 || age > 2.2) continue;
+        const e = age / 2.2;
+        const m = easeOut(Math.min(1, age / 1.8)) * 0.6;
+        const x = beak.x + (w.c.x - beak.x) * m + Math.sin(w.ph * 2 + k * 3) * 7 * e;
+        const y = beak.y + (w.c.y - beak.y) * m - e * S * 0.03;
+        const al = 0.12 * (1 - e) * Math.min(1, e / 0.1);
+        const r = (3 + e * 15) * sc;
+        const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+        rg.addColorStop(0, `rgba(235,240,255,${al})`); rg.addColorStop(1, 'rgba(235,240,255,0)');
+        ctx.fillStyle = rg; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+    }
+  }
+
+  // ---------- Finale: the owls climb, kiss, hearts rise, the night takes everything but the stars ----------
+  const HEART_COLS = ['#ff5d7d', '#ff7f9a', '#ff9db2', '#ffc2cf', '#ffd6a5'];
+  const FLY = 2.0;                                     // seconds a heart-turned-star takes to fly off into the distance
+  function makeHearts() {
+    const hs = [];
+    for (let i = 0; i < 24; i++) hs.push({
+      delay: i * 0.14 + Math.random() * 0.12, life: 4 + Math.random() * 1.4,
+      x0: (Math.random() - 0.5) * 30, vy: 42 + Math.random() * 36, amp: 8 + Math.random() * 18,
+      fq: 1.2 + Math.random() * 1.4, ph: Math.random() * TAU, sz: 6 + Math.random() * 9,
+      col: HEART_COLS[i % HEART_COLS.length], rot: (Math.random() - 0.5) * 0.5, bend: (Math.random() < 0.5 ? -1 : 1) * (20 + Math.random() * 30)
+    });
+    return hs;
+  }
+  function drawHeart(x, y, s, rot, col, a) {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+    ctx.globalAlpha = a; ctx.fillStyle = col;
+    ctx.shadowColor = col; ctx.shadowBlur = 14 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(0, 0.9); ctx.bezierCurveTo(-1.5, -0.1, -0.8, -1.3, 0, -0.55);
+    ctx.bezierCurveTo(0.8, -1.3, 1.5, -0.1, 0, 0.9); ctx.fill();
+    ctx.restore();
+  }
+  function sparkStar(x, y, R, col, a, cr = 1) {       // a small four-point star with a soft glow (cr fades the points to a round glow)
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, R * 2.2);
+    rg.addColorStop(0, `rgba(${col},${(0.5 + 0.25 * (1 - cr)) * a})`); rg.addColorStop(1, `rgba(${col},0)`);
+    ctx.fillStyle = rg; ctx.fillRect(x - R * 2.2, y - R * 2.2, R * 4.4, R * 4.4);
+    if (cr > 0.02) {
+      ctx.strokeStyle = `rgba(${col},${0.9 * a * cr})`; ctx.lineWidth = Math.max(0.8, R * 0.18); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x - R, y); ctx.lineTo(x + R, y); ctx.moveTo(x, y - R); ctx.lineTo(x, y + R); ctx.stroke();
+    }
+    ctx.fillStyle = `rgba(255,255,255,${a})`; ctx.beginPath(); ctx.arc(x, y, Math.max(0.8, R * 0.25), 0, TAU); ctx.fill();
+  }
+  const GAL_TILT = -0.55, GT_C = Math.cos(GAL_TILT), GT_S = Math.sin(GAL_TILT);
+  function galGeom(t) {                                // the galaxy zooms out with everything else
+    const g = skyGeom(t);
+    return { x: g.pxs + (W * 0.74 - g.p0x) * g.scale, y: g.pys + (H * 0.30 - g.p0y) * g.scale,
+             R: Math.min(W * 0.38, H * 0.24) * g.scale, spin: 0.5 * skyTh(t), scale: g.scale };
+  }
+  function galPos(st, gg) {
+    const a = st.a + gg.spin, x = gg.R * st.rr * Math.cos(a), y = gg.R * st.rr * Math.sin(a) * 0.5;
+    return { x: gg.x + x * GT_C - y * GT_S, y: gg.y + x * GT_S + y * GT_C };
+  }
+  function drawGalaxy(t) {
+    if (!fin) return;
+    const gain = smooth(fin.tK + 3, fin.tK + 11, t), gg = galGeom(t);
+    if (gain > 0.01) {                                 // a faint blue-violet glow, kept subtle
+      ctx.save(); ctx.translate(gg.x, gg.y); ctx.rotate(GAL_TILT); ctx.scale(1, 0.5);
+      const rg = ctx.createRadialGradient(0, 0, 0, 0, 0, gg.R * 1.25);
+      rg.addColorStop(0, `rgba(150,130,255,${0.10 * gain})`); rg.addColorStop(0.5, `rgba(110,120,255,${0.05 * gain})`); rg.addColorStop(1, 'rgba(110,120,255,0)');
+      ctx.fillStyle = rg; ctx.fillRect(-gg.R * 1.3, -gg.R * 1.3, gg.R * 2.6, gg.R * 2.6);
+      ctx.restore();
+    }
+    const szf = 0.6 + 0.4 * gg.scale;
+    for (let j = 0; j < gal.length; j++) {
+      const st = gal[j];
+      const al = st.seed ? smooth(fin.hearts[j].arr - 0.3, fin.hearts[j].arr + 0.4, t) : gain;
+      if (al < 0.01) continue;
+      const p = galPos(st, gg), tw = 0.7 + 0.3 * Math.sin(t * 1.3 + st.ph), c = st.tint;
+      if (st.seed) {
+        const rg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 6 * szf);
+        rg.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${0.35 * al})`); rg.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
+        ctx.fillStyle = rg; ctx.fillRect(p.x - 6, p.y - 6, 12, 12);
+      }
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${Math.min(1, al * st.br * tw * 0.9)})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, st.sz * szf * 0.8, 0, TAU); ctx.fill();
+    }
+  }
+  function drawHearts(t) {
+    if (!fin || !fin.C0) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const sc = S / 532, C = fin.C0, gg = galGeom(t);
+    const fl = Math.max(0, 1 - (t - fin.tK) / 1.4);                 // a soft flash at the moment of the kiss
+    if (fl > 0) {
+      const rg = ctx.createRadialGradient(C.x, C.y, 0, C.x, C.y, 46 * sc);
+      rg.addColorStop(0, `rgba(255,170,190,${0.55 * fl})`); rg.addColorStop(1, 'rgba(255,170,190,0)');
+      ctx.fillStyle = rg; ctx.fillRect(C.x - 46 * sc, C.y - 46 * sc, 92 * sc, 92 * sc);
+    }
+    for (let j = 0; j < fin.hearts.length; j++) {
+      const h = fin.hearts[j], age = t - h.start;
+      if (age < 0) continue;
+      const mA = 0.5 * h.life, mB = 0.7 * h.life, ra = Math.min(age, mB);   // rise, turn into a star, then fly away
+      const rx = C.x + h.x0 * sc + Math.sin(ra * h.fq + h.ph) * h.amp * sc * (0.4 + ra / h.life);
+      const ry = C.y - ra * h.vy * sc - 6 * sc;
+      if (age <= mB) {
+        const m = smooth(mA, mB, age), fadeIn = smooth(0, 0.3, age);
+        const sz = h.sz * sc * (0.5 + 0.5 * easeOut(clamp(age / 0.5)));
+        if (m < 0.99) drawHeart(rx, ry, sz * (1 - 0.45 * m), h.rot + Math.sin(age * h.fq + h.ph) * 0.2, h.col, (1 - m) * fadeIn);
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        if (m > 0.01) sparkStar(rx, ry, (2.5 + 3 * m) * sc, '205,200,255', m * fadeIn);
+      } else {
+        const pf = clamp((age - mB) / FLY), fpos = q => {
+          const pe = Math.pow(q, 2.2), T2 = galPos(gal[j], gg), dx = T2.x - rx, dy = T2.y - ry, dl = Math.hypot(dx, dy) || 1;
+          const bulge = Math.sin(Math.PI * q) * h.bend * sc;
+          return { x: rx + dx * pe - dy / dl * bulge, y: ry + dy * pe + dx / dl * bulge, pe };
+        };
+        const P = fpos(pf), Q = fpos(Math.max(0, pf - 0.07));
+        const R = lerp(5.5 * sc, gal[j].sz * 1.4, P.pe), al = 1 - smooth(0.9, 1, pf);
+        if (al > 0.01) {
+          const tg = ctx.createLinearGradient(P.x, P.y, Q.x, Q.y);
+          tg.addColorStop(0, `rgba(190,180,255,${0.5 * al})`); tg.addColorStop(1, 'rgba(190,180,255,0)');
+          ctx.strokeStyle = tg; ctx.lineWidth = Math.max(1, R * 0.5); ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(P.x, P.y); ctx.lineTo(Q.x, Q.y); ctx.stroke();
+          sparkStar(P.x, P.y, R, '205,200,255', al);
+        }
+      }
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  }
+
+  // In the dark, only the owls' eyes remain. They open, and blink twice.
+  function nightBlink(t, t0) {
+    for (const b of [t0 + 1.4, t0 + 2.7]) {
+      const d = t - b;
+      if (d >= 0 && d < 0.3) return d < 0.11 ? 1 - d / 0.11 : (d - 0.11) / 0.19;
+    }
+    return 1;
+  }
+  function drawEye(ex, ey, er, open, a) {              // a glowing owl eye that can blink
+    const rg = ctx.createRadialGradient(ex, ey, er * 0.3, ex, ey, er * 3);
+    rg.addColorStop(0, `rgba(255,214,90,${0.34 * a})`); rg.addColorStop(1, 'rgba(255,214,90,0)');
+    ctx.fillStyle = rg; ctx.fillRect(ex - er * 3, ey - er * 3, er * 6, er * 6);
+    const eg = ctx.createRadialGradient(ex, ey - er * 0.2, er * 0.1, ex, ey, er);
+    eg.addColorStop(0, `rgba(255,232,96,${a})`); eg.addColorStop(1, `rgba(242,180,0,${a})`);
+    ctx.fillStyle = eg; ctx.beginPath(); ctx.ellipse(ex, ey, er, er * open, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = `rgba(13,10,8,${a})`; ctx.beginPath(); ctx.ellipse(ex, ey, er * 0.5, er * 0.5 * open, 0, 0, TAU); ctx.fill();
+    if (open > 0.5) { ctx.fillStyle = `rgba(255,255,255,${0.9 * a})`; ctx.beginPath(); ctx.arc(ex + er * 0.18, ey - er * 0.2, er * 0.15, 0, TAU); ctx.fill(); }
+  }
+  function drawNightEyes(t, Pb, Pw) {
+    const a = smooth(fin.tE0, fin.tE0 + 0.9, t);
+    if (a < 0.01) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const K = zoomK(t), Zx = W * 0.5, Zy = H * 0.42, Kq = Math.pow(K, 0.8);
+    const list = [[Pb, S * 0.145, 0], [Pw, S * 0.105, 0.1]];
+    for (const [P, o, off] of list) {
+      const open = Math.max(0.06, nightBlink(t, fin.tE0 + off)), er = 0.1 * o * Kq;
+      for (const sx of [-1, 1]) {
+        const ex = Zx + (P.x + sx * 0.13 * o - Zx) * K, ey = Zy + (P.y - 0.7 * o - Zy) * K;
+        if (ex < -er * 4 || ex > W + er * 4 || ey < -er * 4 || ey > H + er * 4) continue;
+        drawEye(ex, ey, er, open, a);
+      }
+    }
+  }
+
+  // A heart made of stars slowly comes into view, and at the end it rushes toward you.
+  function drawStarHeart(t, eyeLow) {                  // sits just below the owls' eyes, whatever the screen size
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const top = eyeLow + 0.05 * H, room = H * 0.93 - top;
+    const base = Math.min(W * 0.40, H * 0.26) / 16.5, sc = Math.min(base, room / 29) * (1 + 0.015 * Math.sin(t * 1.6));
+    const hx = W * 0.5, hy = top + 18 * sc;
+    const K = zoomK(t), Zx = W * 0.5, Zy = H * 0.42, Kq = Math.pow(K, 0.7);
+    const zoom = (x, y) => ({ x: Zx + (x - Zx) * K, y: Zy + (y - Zy) * K });
+    const pt = p => zoom(hx + p.x * sc, hy - (p.y + 6) * sc);
+    const hc = zoom(hx, hy), crossAmt = 1 - smooth(1, 2.2, K);   // as it grows, the star points soften into round glows
+    const ap = p => smooth(fin.tH0 + p.key * 3, fin.tH0 + p.key * 3 + 1.6, t);
+    const avg = smooth(fin.tH0 + 1, fin.tH0 + 4.5, t);
+    if (avg > 0.01) {
+      const gr = 18 * sc * K, rg = ctx.createRadialGradient(hc.x, hc.y, 0, hc.x, hc.y, gr);
+      rg.addColorStop(0, `rgba(255,150,190,${0.09 * avg})`); rg.addColorStop(0.6, `rgba(150,140,255,${0.05 * avg})`); rg.addColorStop(1, 'rgba(150,140,255,0)');
+      ctx.fillStyle = rg; ctx.fillRect(hc.x - gr, hc.y - gr, gr * 2, gr * 2);
+    }
+    ctx.strokeStyle = 'rgba(215,205,255,1)'; ctx.lineWidth = 0.8 * Math.sqrt(K); ctx.lineCap = 'round';
+    for (let k = 0; k < HN; k++) {                      // faint lines join the outline, like a constellation
+      const a = HEART[k], b = HEART[(k + 1) % HN], al = Math.min(ap(a), ap(b)) * 0.2;
+      if (al < 0.01) continue;
+      const pa = pt(a), pb = pt(b);
+      if (Math.max(pa.x, pb.x) < -50 || Math.min(pa.x, pb.x) > W + 50 || Math.max(pa.y, pb.y) < -50 || Math.min(pa.y, pb.y) > H + 50) continue;
+      ctx.globalAlpha = al; ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    for (const p of HEART) {
+      const a = ap(p);
+      if (a < 0.01) continue;
+      const q = pt(p), d = Math.hypot(q.x - hc.x, q.y - hc.y) || 1, off = (1 - easeOut(a)) * 34 * K;   // stars drift in from outside
+      const x = q.x + (q.x - hc.x) / d * off, y = q.y + (q.y - hc.y) / d * off;
+      const R = p.sz * (p.ring ? 2.4 : 1.7) * (0.6 + 0.4 * a) * Kq;
+      if (x < -R * 3 || x > W + R * 3 || y < -R * 3 || y > H + R * 3) continue;
+      const tw = 0.75 + 0.25 * Math.sin(t * 1.9 + p.ph);
+      sparkStar(x, y, R, p.ring ? '255,226,240' : '210,215,255', a * tw, crossAmt);
+    }
+  }
+  // "Night Night": each g holds a pair of owl eyes. They open, blink twice, and close.
+  function measureNight() {
+    const cr = cv.getBoundingClientRect(), nr = nn.getBoundingClientRect();
+    const cs = getComputedStyle(nn), fs = parseFloat(cs.fontSize) || 64;
+    ctx.font = cs.fontWeight + ' ' + fs + 'px ' + cs.fontFamily;
+    let xh = ctx.measureText('x').actualBoundingBoxAscent;
+    if (!(xh > fs * 0.3)) xh = fs * 0.52;                            // the bowl of the g sits half an x-height above the baseline
+    nnEyes = gEls.map((g, i) => ({
+      x: nr.left - cr.left + g.offsetLeft + g.offsetWidth * 0.5,
+      y: nr.top - cr.top + blEls[i].offsetTop - xh * 0.5, fs
+    }));
+  }
+  function drawTextEyes(t) {
+    if (!fin || nnEyes.length < 2) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const out = 1 - smooth(fin.tNF0, fin.tNF1, t), sleepy = smooth(fin.tN2 + 4.4, fin.tN2 + 5.4, t);
+    for (let i = 0; i < 2; i++) {
+      const ge = nnEyes[i], t0 = i ? fin.tN2 : fin.tN1;
+      const a = smooth(t0 + 1.0, t0 + 1.8, t) * out;
+      if (a < 0.01) continue;
+      const blinks = i ? [fin.tN2 + 2.0, fin.tN2 + 3.2] : [fin.tN1 + 2.0, fin.tN1 + 3.2, fin.tN2 + 2.0, fin.tN2 + 3.2];
+      let open = 1;
+      for (const b of blinks) { const d = t - b; if (d >= 0 && d < 0.3) open = d < 0.11 ? 1 - d / 0.11 : (d - 0.11) / 0.19; }
+      open = Math.max(0.05, Math.min(open, 1 - sleepy));
+      const er = ge.fs * 0.06, dx = ge.fs * 0.075;
+      for (const sx of [-1, 1]) drawEye(ge.x + sx * dx, ge.y, er, open, a);
+    }
+  }
+  function planRoute(home, meet, t0, delay) {          // a random climb, branch by branch, to the shared spot
+    const hu = bez(home.seg, home.s)[1], mu = bez(meet.seg, meet.s)[1];
+    const cands = prims.filter(p => p.u > hu + 0.05 && p.u < mu - 0.05);
+    const n = Math.min(cands.length, Math.random() < 0.5 ? 2 : 3);
+    const mids = shuffle(cands.slice()).slice(0, n).sort((a, b) => a.u - b.u)
+      .map(p => ({ seg: p.seg, s: 0.4 + Math.random() * 0.42 }));
+    const stops = [home, ...mids, meet], steps = [];
+    let t = t0 + delay + 0.4 + Math.random() * 0.6;
+    for (let i = 0; i < stops.length - 1; i++) {
+      const a = bez(stops[i].seg, stops[i].s), b = bez(stops[i + 1].seg, stops[i + 1].s);
+      const dur = 0.75 + 1.6 * Math.hypot(a[0] - b[0], a[1] - b[1]);
+      steps.push({ t0: t, t1: t + dur, from: stops[i], to: stops[i + 1] });
+      t += dur + 0.4 + Math.random() * 0.7;
+    }
+    return { steps, arrive: steps[steps.length - 1].t1 };
+  }
+  function startFinale(t) {
+    if (fin) return;
+    cutLeaves(t);
+    const prev = advs[advs.length - 1];
+    if (prev && t < prev.end) { prev.fadeStart = Math.min(prev.fadeStart, t); prev.end = Math.min(prev.end, t + 0.7); }
+    const D = (0.29 * S * (0.145 + 0.105) + 10) / S;   // spacing between the two owls on the meeting branch
+    const s1 = 0.22, p1 = bez(meetSeg, s1);
+    let s2 = s1;
+    for (let s = s1; s <= 1; s += 0.01) { s2 = s; if (Math.abs(bez(meetSeg, s)[0] - p1[0]) >= D) break; }
+    const meetB = { seg: meetSeg, s: s1 }, meetW = { seg: meetSeg, s: s2 };
+    const rb = planRoute(owls[1].home, meetB, t, 0), rw = planRoute(owls[0].home, meetW, t, 0.4 + Math.random() * 0.8);
+    const tA = Math.max(rb.arrive, rw.arrive), tL0 = tA + 1.2, tK = tL0 + 1.8;
+    const hearts = makeHearts();
+    hearts.forEach(h => { h.start = tK + h.delay; h.arr = h.start + 0.7 * h.life + FLY; });
+    fin = {
+      f0: t, routes: { b: rb, w: rw }, meetB, meetW, tA, tL0, tK, hearts, C0: null, btn: false,
+      z0: tK + 10, z1: tK + 14.5,              // the star field zooms out and shrinks
+      tE0: tK + 14.8,                          // the owls' eyes open in the dark and blink twice
+      tH0: tK + 18,                            // a heart of stars slowly appears
+      tF0: tK + 23.2, tF1: tK + 27,            // the heart and the whole night rush toward the viewer
+      black0: tK + 25.7, black1: tK + 27.3,    // then black
+      tN1: tK + 28, tN2: tK + 31.8,            // "Night" ... "Night": two beats
+      tNF0: tK + 37.8, tNF1: tK + 39.8,        // the words fade
+      tLoop: tK + 40.8                         // and it all begins again
+    };
+    btn.classList.remove('on');
+  }
+
+  function layout() {
+    const r = cv.getBoundingClientRect();
+    W = r.width; H = r.height;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    gy = H * 0.865; cx = W / 2;
+    S = Math.min(gy - H * 0.2, W * 1.5);
+    band = (H - gy) * 0.8;
+    hint.style.bottom = (H - gy + 16) + 'px';
+    speeches.forEach(measureSpeech);
+    measureNight();
+  }
+
+  function growth(t) {
+    const pop = easeOut(clamp((t - 0.4) / 1.3)) * 0.03;
+    const r = clamp((t - 1.6) / 9.9);
+    const main = r < 0.5 ? 2 * r * r : 1 - Math.pow(-2 * r + 2, 2) / 2;
+    return pop + 0.97 * main;
+  }
+  const windAt = t => 0.55 + 0.7 * smooth(13, 17, t) * (1 - smooth(24, 30, t)) + 0.1 * Math.sin(t * 0.5);
+
+  const G0 = [103,190,70], GF = [165,225,120], YL = [247,208,72], OR = [233,134,38], TAN = [204,171,120];
+  function leafRGB(tp, fresh, v) {
+    let c;
+    if (tp <= 0) c = mixc(G0, GF, fresh);
+    else if (tp < 0.34) c = mixc(G0, YL, tp / 0.34);
+    else if (tp < 0.68) c = mixc(YL, OR, (tp - 0.34) / 0.34);
+    else c = mixc(OR, TAN, (tp - 0.68) / 0.32);
+    return [c[0] * v, c[1] * v, c[2] * v];
+  }
+
+  function gazeFor(hx, hy, t, lc) {                    // shooting star / chosen star first, else the last leaf
+    const gz = { x: 0, y: 0, w: 0 };
+    const ad = advs[advs.length - 1];
+    if (ad) {
+      const w = smooth(ad.c0, ad.c0 + 0.5, t) * (1 - smooth(ad.sp.t0, ad.sp.t0 + 0.9, t));
+      if (w > 0.001) {
+        const tg = t < ad.c0 + 1.5 ? shootHead(ad, t) : starNow(ad, t);
+        gz.w = w; gz.x = clamp((tg.x - hx) / (S * 0.22), -1, 1); gz.y = clamp((tg.y - hy) / (S * 0.3), -1, 1);
+        return gz;
+      }
+    }
+    if (lc) {
+      const c = lc.c, lf = lc.s;
+      gz.w = smooth(c.a, c.a + 1.2, t) * (1 - smooth(c.f + c.D - 0.3, c.f + c.D + 1.1, t));
+      gz.x = clamp((lf.x - hx) / (S * 0.22), -1, 1); gz.y = clamp((lf.y - hy) / (S * 0.3), -1, 1);
+    }
+    return gz;
+  }
+
+  function draw(t) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const g = growth(t);
+    const gt = clamp(g / 0.85);
+    const zc = 1 + 0.9 * (1 - smooth(0, 0.7, g));
+    const Sz = S * zc;
+    const wind = windAt(t);
+
+    // sky
+    const top = sample(BG_TOP, t), bot = sample(BG_BOT, t);
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, rgbs(top)); sky.addColorStop(1, rgbs(bot));
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+    // stars: the whole sky turns counterclockwise, from the first moment to the last
+    drawStars(t, gy, 1);
+    for (const ad of advs) { drawShoot(ad, t); drawSparkle(ad, t); }
+
+    // glow
+    const gl = sample(GLOW, t);
+    const treeH = gt * Sz;
+    const gcy = gy - treeH * 0.6, grad = Math.max(S * 0.35, treeH * 0.9);
+    const rg = ctx.createRadialGradient(cx, gcy, 0, cx, gcy, grad);
+    rg.addColorStop(0, `rgba(${gl[0] | 0},${gl[1] | 0},${gl[2] | 0},${gl[3]})`);
+    rg.addColorStop(1, `rgba(${gl[0] | 0},${gl[1] | 0},${gl[2] | 0},0)`);
+    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+
+    // motes
+    for (const m of motes) {
+      const mx = m.x * W + Math.sin(t * 0.3 + m.ph) * 14;
+      const my = (((m.y - t * m.s * 0.05) % 1) + 1) % 1 * gy * 0.95;
+      const a = 0.12 + 0.22 * (0.5 + 0.5 * Math.sin(t * 0.9 + m.ph));
+      ctx.fillStyle = `rgba(${gl[0] | 0},${gl[1] | 0},${gl[2] | 0},${a})`;
+      ctx.beginPath(); ctx.arc(mx, my, m.r, 0, TAU); ctx.fill();
+    }
+
+    // ground
+    const gg = ctx.createLinearGradient(0, gy, 0, H);
+    gg.addColorStop(0, 'rgba(8,12,10,0.55)'); gg.addColorStop(1, 'rgba(4,6,6,0.88)');
+    ctx.fillStyle = gg; ctx.fillRect(0, gy, W, H - gy);
+    ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(0, gy, W, 1);
+
+    const sway = y => Math.sin(t * 0.8 + y * 2.2) * Sz * 0.0065 * y * y * wind * (0.85 + 0.15 * Math.sin(t * 0.37));
+    const X = (x, y) => cx + x * Sz + sway(y);
+    const Y = y => gy + 3 - y * Sz;
+
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // trunk
+    if (gt > 0.0005) {
+      const woody = smooth(0.05, 0.4, g);
+      const trunkCol = rgbs(mixc([140,205,100], [236,232,218], woody));
+      const edgeCol = rgbs(mixc([90,160,70], [150,146,130], woody));
+      const wBase = 2.4 + Sz * 0.021 * smooth(0, 1, g);
+      const tw = un => wBase * (1 - 0.84 * un);
+      const n = Math.max(2, Math.ceil(gt * 36));
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.strokeStyle = pass ? trunkCol : edgeCol;
+        for (let i = 0; i < n; i++) {
+          const u0 = gt * i / n, u1 = gt * (i + 1) / n;
+          const w = tw((u0 + u1) / 2 / gt);
+          ctx.lineWidth = pass ? w * 0.8 : w + 1.4;
+          ctx.beginPath();
+          ctx.moveTo(X(trunkX(u0), u0), Y(u0));
+          ctx.lineTo(X(trunkX(u1), u1), Y(u1));
+          ctx.stroke();
+        }
+      }
+      if (g > 0.3) {
+        const bgr = ctx.createLinearGradient(0, Y(0), 0, Y(0.11));
+        bgr.addColorStop(0, `rgba(40,34,28,${smooth(0.3, 0.6, g) * 0.4})`); bgr.addColorStop(1, 'rgba(40,34,28,0)');
+        ctx.strokeStyle = bgr;
+        ctx.lineCap = 'butt'; ctx.lineWidth = tw(0.05 / gt) * 0.8;
+        ctx.beginPath();
+        for (let i = 0; i <= 6; i++) { const u = 0.11 * i / 6; if (i) ctx.lineTo(X(trunkX(u), u), Y(u)); else ctx.moveTo(X(trunkX(u), u), Y(u)); }
+        ctx.stroke();
+        ctx.lineCap = 'round';
+      }
+      if (g > 0.22) {
+        ctx.fillStyle = `rgba(28,24,20,${smooth(0.22, 0.5, g) * 0.7})`;
+        for (const e of eyes) {
+          if (e.u > gt * 0.97) continue;
+          const w = tw(e.u / gt);
+          ctx.beginPath();
+          ctx.ellipse(X(trunkX(e.u), e.u) + e.off * w, Y(e.u), Math.max(1, w * 0.32 * e.sz), Math.max(0.8, w * 0.075 * e.sz + 0.4), 0, 0, TAU);
+          ctx.fill();
+        }
+      }
+    }
+
+    // branches + twigs
+    const thick = 0.5 + 0.5 * smooth(0, 1, g);
+    for (const s of segs) {
+      const gp = clamp((g - s.t0) / s.span);
+      if (gp <= 0) continue;
+      const fresh = (1 - clamp((g - s.t0) / 0.4)) * (1 - smooth(11, 17, t));
+      ctx.strokeStyle = rgbs(mixc(s.twig ? [150,142,124] : [200,195,178], [130,196,96], fresh * 0.75));
+      const steps = Math.max(2, Math.ceil(gp * 10));
+      for (let k = 0; k < steps; k++) {
+        const a = gp * k / steps, b = gp * (k + 1) / steps;
+        const p = bez(s, a), q = bez(s, b);
+        ctx.lineWidth = Math.max(0.8, lerp(s.w0, s.w1, (a + b) / 2) * Sz * thick);
+        ctx.beginPath();
+        ctx.moveTo(X(p[0], p[1]), Y(p[1]));
+        ctx.lineTo(X(q[0], q[1]), Y(q[1]));
+        ctx.stroke();
+      }
+    }
+
+    // seed leaves
+    const cot = easeOut(clamp((t - 0.9) / 0.9)) * (1 - smooth(0.04, 0.3, g));
+    if (cot > 0.01) {
+      for (const sg2 of [-1, 1]) leaf(X(trunkX(0.02), 0.02), Y(0.02), sg2 * 2.17, Sz * 0.009 * cot, 0.5, 1, 'rgb(156,216,112)', false);
+    }
+
+    // landed leaves
+    ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 0.07;
+    for (const L of byLy) {
+      if (t < L.landT) continue;
+      const lx = clamp(cx + (L.ux + L.dx) * S, 14, W - 14), ly = gy + 6 + L.ly * band;
+      const r = L.r * S * 0.0125 * (1 + L.ly * 0.4);
+      const dark = 1 - 0.2 * clamp((t - L.landT) / 6);
+      leaf(lx, ly, L.rest, r, 1, 0.32, rgbs(leafRGB(1, 0, L.v * dark)), false);
+    }
+
+    // attached + falling leaves
+    const grown = 0.5 + 0.5 * smooth(0, 1, g);
+    const fresh = (1 - smooth(0.05, 0.9, g)) * 0.6;
+    for (const L of leaves) {
+      if (t >= L.landT) continue;
+      let ux, uy, ap;
+      if (L.seg) {
+        const gp = clamp((g - L.seg.t0) / L.seg.span);
+        ap = clamp((gp - 0.75 * L.s) / 0.2);
+        if (ap <= 0) continue;
+        const p = bez(L.seg, Math.min(L.s, gp)); ux = p[0]; uy = p[1];
+      } else {
+        ap = clamp((t - L.appear) / 1.2);
+        if (ap <= 0) continue;
+        ux = trunkX(gt); uy = gt;
+      }
+      const tp = clamp((t - L.turn0) / L.turnD);
+      const fp = (t - L.fall0) / L.fallD;
+      const shim = 0.5 + 0.5 * Math.sin(t * L.fq * 0.8 + L.ph);
+      const sxAtt = 1 - 0.24 * wind * shim;
+
+      if (fp <= 0) {
+        const r = L.r * Sz * 0.0125 * grown * easeOut(ap);
+        const fl = Math.sin(t * L.fq + L.ph) * 0.24 * wind + Math.sin(t * 1.7 + L.ph * 2) * 0.08 * wind;
+        leaf(X(ux, uy), Y(uy), L.ang + fl, r, sxAtt, 1, rgbs(leafRGB(tp, fresh, L.v), (1 - sxAtt) * 0.9), r > 4);
+      } else {
+        const p = clamp(fp);
+        const rx = cx + L.ux * S, ry = gy + 3 - L.uy * S;
+        const lx = clamp(cx + (L.ux + L.dx) * S, 14, W - 14), ly = gy + 6 + L.ly * band;
+        const ye = p * (0.5 + 0.5 * p);
+        const xe = smooth(0, 1, p) * 0.9 + p * 0.1;
+        const x = rx + (lx - rx) * xe
+                + Math.sin(p * Math.PI * L.sw + L.ph) * S * 0.03 * (1 - p) * Math.min(1, p * 6)
+                + sway(L.uy) * (1 - clamp(p * 6));
+        const y = ry + (ly - ry) * ye;
+        const flat = smooth(0.8, 1, p);
+        let rot = L.ang + Math.sin(p * 7 + L.ph) * 1.0 * (1 - p) + p * L.spin * (1 - flat) * 0.6;
+        rot = lerp(rot, L.rest, flat);
+        const tum = Math.abs(Math.cos(p * 9 + L.ph)) * 0.8 + 0.2;
+        const sx = lerp(lerp(sxAtt, tum, smooth(0, 0.15, p)), 1, flat);
+        const ky = lerp(1, 0.32, flat);
+        const r = L.r * S * 0.0125 * (1 + L.ly * 0.4 * flat);
+        leaf(x, y, rot, r, sx, ky, rgbs(leafRGB(tp, 0, L.v)), flat < 0.5);
+      }
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // ---- owls ----
+    const perchPx = pe => {
+      const p = bez(pe.seg, pe.s);
+      return { x: X(p[0], p[1]), y: Y(p[1]) - lerp(pe.seg.w0, pe.seg.w1, pe.s) * Sz * thick * 0.5 };
+    };
+    const lfList = leafCycles.map(c => leafStateFor(c, t));
+    let lf = null;
+    for (let i = leafCycles.length - 1; i >= 0; i--) if (lfList[i]) { lf = { c: leafCycles[i], s: lfList[i] }; break; }
+    const oaB = easeOut(clamp((t - T.owl) / 2.2));
+    if (oaB > 0) {                                     // the crutch stays with the wise owl's branch
+      const tp = bez(owlSeg, 1.0);
+      drawCrutch(oaB, X(tp[0], tp[1]), Y(tp[1]) + lerp(owlSeg.w0, owlSeg.w1, 1) * Sz * thick * 0.5, gy + 14);
+    }
+
+    // where the two beaks will meet, once both owls are on the shared branch
+    let kg = null;
+    if (fin) {
+      const Pb = perchPx(fin.meetB), Pw = perchPx(fin.meetW), ob = S * 0.145, ow = S * 0.105;
+      const tb = tipLocal(-1), tw2 = tipLocal(1);
+      const tipB = { x: Pb.x + tb.x * ob, y: Pb.y + tb.y * ob }, tipW = { x: Pw.x + tw2.x * ow, y: Pw.y + tw2.y * ow };
+      const C = { x: (tipB.x + tipW.x) / 2, y: (tipB.y + tipW.y) / 2 };
+      kg = { C, b: { x: (C.x - tipB.x) / ob, y: (C.y - tipB.y) / ob }, w: { x: (C.x - tipW.x) / ow, y: (C.y - tipW.y) / ow } };
+      if (!fin.C0 && t >= fin.tK - 0.05) fin.C0 = { x: C.x, y: C.y };
+    }
+
+    for (const ow of owls) {
+      const o = S * ow.k;
+      ow.hit = null;
+      const a = easeOut(clamp((t - ow.appear) / 2.2));
+      if (a <= 0) continue;
+
+      // pose: at home, or somewhere along its climb
+      let at = ow.home, nxt = null, flyStep = null, lastLand = -99;
+      if (fin) for (const st of fin.routes[ow.id].steps) {
+        if (t < st.t0) { nxt = st.to; break; }
+        if (t <= st.t1) { flyStep = st; break; }
+        at = st.to; lastLand = st.t1;
+      }
+      let px, py, fly = 0, sy = 1, rot = 0;
+      if (flyStep) {
+        const A = perchPx(flyStep.from), B = perchPx(flyStep.to);
+        const p = (t - flyStep.t0) / (flyStep.t1 - flyStep.t0), e = smooth(0, 1, p);
+        const lift = (0.04 * S + 0.1 * Math.hypot(B.x - A.x, B.y - A.y)) * Math.sin(Math.PI * p);
+        px = lerp(A.x, B.x, e); py = lerp(A.y, B.y, e) - lift;
+        fly = t * 16; sy = 1 + 0.1 * Math.sin(Math.PI * p); rot = (B.x > A.x ? 1 : -1) * 0.12 * Math.sin(Math.PI * p);
+      } else {
+        const P = perchPx(at); px = P.x; py = P.y;
+        const lk = clamp(1 - (t - lastLand) / 0.35);   // a small squat on landing
+        if (lk > 0) sy = 1 - 0.08 * Math.sin(lk * Math.PI);
+      }
+      const headY = py - o * 0.7;
+
+      // the pulse that says "tap me", until the wise owl has been asked something
+      if (ow.isBrown && t > T.ready && !advs.length && !fin) {
+        const k = smooth(T.ready, T.ready + 2, t) * (0.10 + 0.07 * Math.sin(t * 2));
+        const hg = ctx.createRadialGradient(px, py - o * 0.5, o * 0.2, px, py - o * 0.5, o * 1.3);
+        hg.addColorStop(0, `rgba(255,214,140,${k})`); hg.addColorStop(1, 'rgba(255,214,140,0)');
+        ctx.fillStyle = hg; ctx.fillRect(px - o * 1.4, py - o * 1.9, o * 2.8, o * 2.8);
+      }
+
+      // gaze
+      const gz = gazeFor(px, headY, t, lf);
+      if (fin) {
+        gz.w = 1;
+        if (nxt) { const N2 = perchPx(nxt); gz.x = clamp((N2.x - px) / (S * 0.2), -1, 1); gz.y = -0.7; }
+        else if (!flyStep) { gz.x = ow.ts * -1; gz.y = 0; }   // once settled, each looks at the other
+      }
+
+      // kiss: turn to profile, lean in, tilt
+      let turn = 0, hdx = 0, hdy = 0, tiltK = 0;
+      if (fin && kg && t >= fin.tL0) {
+        const kk = clamp((t - fin.tL0) / 1.6), e = kk * kk * (3 - 2 * kk);
+        turn = ow.ts * e; tiltK = ow.ts * 0.2 * e;
+        const hd = ow.isBrown ? kg.b : kg.w; hdx = hd.x * e; hdy = hd.y * e;
+        gz.w = 1 - e;
+      }
+
+      const hd0 = sample(HEAD, t - (ow.isBrown ? 0 : 1.4));
+      const ac = actionAt(ow.id, t);
+      const stretchW = ac && ac.type === 'stretch' ? ac.w : 0, pw = ac && ac.type === 'preen' ? ac.w : 0, pside = ac ? ac.side : 1;
+      if (ac && ac.type === 'preen' && t >= ac.a.tf && !ac.a.fx) { ac.a.fx = px + pside * 0.36 * o; ac.a.fy = py - 0.3 * o; ac.a.fo = o; }
+      gz.w *= (1 - pw);
+      hdx += pside * 0.06 * pw; hdy += 0.13 * pw - 0.02 * stretchW;
+      const nod = 0.09 * smooth(T.rest + ow.restDelay + 0.4, T.rest + ow.restDelay + 2.6, t) * (1 - wake(t));
+      const pk = clamp(1 - (t - pokes[ow.id]) / 1.2), poke = pk > 0 ? Math.sin((t - pokes[ow.id]) * 10) * 0.14 * pk : 0;
+      let bo = 0;                                     // the wise owl's beak opens once per spoken word
+      if (ow.isBrown) for (const sp of speeches) for (const w of sp.words) {
+        const d = (t - w.start) / 0.45;
+        if (d > 0 && d < 1) bo = Math.max(bo, Math.sin(d * Math.PI));
+      }
+      drawOwlFig(t, px, py, o, {
+        pal: ow.pal, a, seed: ow.seed, isBrown: ow.isBrown, drawer: ow.isBrown, bo,
+        tilt: hd0[0] + 0.025 * Math.sin(t * 0.7 + ow.seed) * a + gz.w * gz.x * 0.14 + nod + poke + tiltK + pside * 0.55 * pw,
+        look: lerp(lerp(hd0[1] * (ow.isBrown ? 1 : 0), gz.x, gz.w), pside * 0.6, pw), lookY: lerp(gz.y * gz.w, 0.9, pw),
+        open: eyeOpen(t, ow.blinks, ow.restDelay, Math.max(pw, stretchW)) * (1 - 0.55 * pw), turn, hdx, hdy, fly, sy: sy * (1 + 0.03 * stretchW), rot,
+        stretch: stretchW, pw, pside, wph: t * 4 + ow.seed, nib: pw * (0.5 + 0.5 * Math.sin(t * 22)) * 0.9,
+        sx: 1 + 0.04 * stretchW + 0.02 * pw * Math.sin(t * 24)
+      });
+      if (a > 0.4) ow.hit = { x: px, y: py - o * 0.5, rx: o * 0.36 + 12, ry: o * 0.62 + 8 };
+    }
+    for (const a of actions) {                          // a loose feather from each preen drifts down
+      if (a.type !== 'preen' || !a.fx) continue;
+      const age = t - a.tf;
+      if (age < 0 || age > 3.4) continue;
+      drawFeather(a.fx + Math.sin(age * 2.4) * a.fo * 0.16 + age * 3, a.fy + age * a.fo * 0.3, Math.sin(age * 3.1),
+                  a.fo * 0.085, 1 - smooth(2.4, 3.4, age), a.id === 'b' ? BROWN.belly : WHITE.belly);
+    }
+    lfList.forEach((st, i) => { if (st) drawLeaf(st, i === lfList.length - 1); });
+    drawVapor(t);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // ---- finale: everything fades to dark except the spinning stars, then to black ----
+    if (fin) {
+      const dark = smooth(fin.tK, fin.tK + 5, t), black = smooth(fin.black0, fin.black1, t);
+      if (dark > 0.001 && black < 0.999) {
+        ctx.fillStyle = `rgba(3,5,12,${dark})`; ctx.fillRect(0, 0, W, H);
+        const rush = 1 + 0.5 * smooth(fin.tF0, fin.tF0 + 1.5, t);
+        drawStars(t, lerp(gy, H, dark), (1 + 0.2 * dark) * (1 - 0.45 * smooth(fin.tH0 - 0.5, fin.tH0 + 1.5, t)) * rush);
+        drawGalaxy(t);
+        if (t >= fin.tE0) drawNightEyes(t, perchPx(fin.meetB), perchPx(fin.meetW));
+        if (t >= fin.tH0) {
+          const Pb = perchPx(fin.meetB), Pw = perchPx(fin.meetW);
+          drawStarHeart(t, Math.max(Pb.y - 0.7 * S * 0.145 + 0.1 * S * 0.145, Pw.y - 0.7 * S * 0.105 + 0.1 * S * 0.105));
+        }
+        drawHearts(t);
+      }
+      if (black > 0.001) { ctx.fillStyle = `rgba(0,0,0,${black})`; ctx.fillRect(0, 0, W, H); }
+      drawTextEyes(t);
+    } else if (t < 3.2) {                              // every run (and every loop) opens from black into the glow and the distant stars
+      const ia = 1 - smooth(0.2, 3.0, t);
+      if (ia > 0.002) { ctx.fillStyle = `rgba(0,0,0,${ia})`; ctx.fillRect(0, 0, W, H); }
+    }
+  }
+
+  // ---------- Speech: words drift out of the wise owl's beak ----------
+  function owlAnchor() {
+    const p = bez(owlSeg, OWL_S);
+    return { x: cx + p[0] * S, y: gy + 3 - p[1] * S - 2 };
+  }
+  function makeSpeech(items, kind, t0) {
+    const el = document.createElement('div');
+    el.className = 'say ' + kind;
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-label', items.map(i => i.t).join(' '));
+    const ws = [];
+    let s = t0;
+    items.forEach((it, i) => {
+      const w = document.createElement('span');
+      w.className = 'wd' + (it.em ? ' em' : '');
+      w.setAttribute('aria-hidden', 'true');
+      w.textContent = it.t;
+      el.appendChild(w);
+      let start;
+      if (kind === 'open') start = t0 + WSTART[i];
+      else { start = s; s += 0.3 + (/[.,;:]$/.test(it.t) ? 0.45 : 0); }
+      ws.push({ el: w, start, ph: i * 0.9 + (kind === 'open' ? 0 : 3), c: null });
+    });
+    document.body.appendChild(el);
+    const sp = { el, kind, t0, words: ws, lastArrive: ws[ws.length - 1].start + LDUR, fs: 24 };
+    speeches.push(sp);
+    measureSpeech(sp);
+    return sp;
+  }
+  function measureSpeech(sp) {
+    const cr = cv.getBoundingClientRect();
+    const a = owlAnchor(), o = S * 0.145;
+    beak.x = beak.x || a.x; beak.y = beak.y || (a.y - o * 0.62);
+    sp.el.style.bottom = (H - (a.y - o * 1.5)) + 'px';
+    const r = sp.el.getBoundingClientRect();
+    for (const w of sp.words) {
+      const e = w.el;
+      w.c = { x: r.left + e.offsetLeft + e.offsetWidth / 2 - cr.left, y: r.top + e.offsetTop + e.offsetHeight / 2 - cr.top, w: e.offsetWidth };
+    }
+    sp.fs = parseFloat(getComputedStyle(sp.words[0].el).fontSize) || 24;
+    if (sp.kind === 'open') {       // where the last leaf hangs, like a full stop
+      fsB = sp.fs;
+      const last = sp.words[sp.words.length - 1].c;
+      periodPos.r = fsB * 0.11;
+      periodPos.x = last.x + last.w / 2 + 0.2 * fsB;
+      periodPos.y = last.y + 0.28 * fsB - 2 * periodPos.r;
+    }
+  }
+  function openAlpha(t) {          // the opening line steps aside while the owl gives advice (or the owls leave), then returns
+    const a = advs[advs.length - 1];
+    let v = a ? 1 - smooth(a.c0, a.c0 + 0.7, t) * (1 - smooth(a.end + 0.5, a.end + 2.5, t)) : 1;
+    if (fin) v = Math.min(v, 1 - smooth(fin.f0, fin.f0 + 0.7, t));
+    return v;
+  }
+  function updateSpeeches(t) {
+    for (let i = speeches.length - 1; i >= 0; i--) {
+      const sp = speeches[i];
+      let alpha;
+      if (sp.kind === 'open') { if (t < sp.t0 - 0.05) continue; alpha = openAlpha(t); }
+      else {
+        const ad = sp.adv;
+        if (t >= ad.end) { sp.el.remove(); speeches.splice(i, 1); continue; }
+        alpha = 1 - smooth(ad.fadeStart, ad.end, t);
+        sp.el.style.setProperty('--pa', (smooth(sp.t0 - 0.3, sp.t0 + 0.6, t) * alpha).toFixed(3));
+      }
+      for (const w of sp.words) {
+        const p = clamp((t - w.start) / LDUR), st = w.el.style;
+        if (p <= 0) { st.opacity = 0; continue; }
+        if (p < 1) {
+          const e = easeOut(p), c = w.c;
+          st.opacity = clamp(p * 3) * alpha;
+          st.filter = 'blur(' + ((1 - e) * 7).toFixed(1) + 'px)';
+          st.transform = 'translate(' + ((beak.x - c.x) * (1 - e)) + 'px,' +
+            ((beak.y - c.y) * (1 - e) - Math.sin(e * Math.PI) * 14 * (S / 532)) + 'px) scale(' + (0.2 + 0.8 * e) + ')';
+        } else {
+          const bl = (1 - alpha) * 6;      // once settled, words float a little, as if held in still water
+          st.opacity = alpha;
+          st.filter = bl > 0.05 ? 'blur(' + bl.toFixed(1) + 'px)' : 'none';
+          st.transform = 'translateY(' + (Math.sin(t * 0.8 + w.ph) * sp.fs * 0.03).toFixed(2) + 'px)';
+        }
+      }
+    }
+    const ad = advs[advs.length - 1];
+    let busy = ad ? smooth(ad.c0 - 0.01, ad.c0 + 0.4, t) * (1 - smooth(ad.end, ad.end + 1.2, t)) : 0;
+    if (fin) busy = Math.max(busy, smooth(fin.f0, fin.f0 + 0.5, t));
+    hint.style.opacity = (0.78 * smooth(T.ready, T.ready + 2, t) * (1 - busy)).toFixed(3);
+    if (fin && t >= fin.tN1 - 0.1) {                   // the last words, on black, in two beats
+      const out = 1 - smooth(fin.tNF0, fin.tNF1, t);
+      [fin.tN1, fin.tN2].forEach((t0, i) => {
+        const o = smooth(t0, t0 + 1.8, t) * out, st = nnLines[i].style;
+        st.opacity = o.toFixed(3);
+        st.filter = 'blur(' + ((1 - o) * 8).toFixed(1) + 'px)';
+      });
+    }
+  }
+
+  // ---------- Tap an owl ----------
+  function startAdvice(t) {
+    const prev = advs[advs.length - 1];
+    let c0 = t;
+    if (prev && t < prev.end) {                   // let the last advice finish arriving, then ease it out
+      if (t < prev.sp.lastArrive) { pokes.b = t; return; }
+      prev.fadeStart = t; prev.end = t + 0.7; c0 = t + 0.5;
+    }
+    while (advs.length && advs[0].end < t - 6) advs.shift();
+    const g = skyGeom(c0 + 1.5), star = pickStar(c0 + 1.5), tgt = starPos(star, c0 + 1.5, g);
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const ad = { c0, star, s0: { x: tgt.x + side * W * 0.75, y: Math.min(tgt.y - H * 0.25, tgt.y - 60) }, sp: null, fadeStart: 0, end: 0 };
+    const items = nextAdvice().split(' ').map(x => ({ t: x }));
+    ad.sp = makeSpeech(items, 'advice', c0 + 1.7);
+    ad.sp.adv = ad;
+    ad.fadeStart = ad.sp.lastArrive + 2.4 + 0.15 * items.length;
+    ad.end = ad.fadeStart + 2.2;
+    advs.push(ad);
+    cutLeaves(c0);                                     // "It's OK to let go" returns after the advice, and so does the gold leaf
+    const la = ad.end + 2.7;
+    leafCycles.push({ a: la, f: la + 1.8, D: 5.5, lx: 0.05 + (Math.random() - 0.3) * 0.2, ly: 0.3 + Math.random() * 0.45 });
+    ad.rest = la + 1.8 + 5.5 + 0.3;                    // the owl stays awake until the leaf has landed
+  }
+  function whichOwl(e) {
+    const r = cv.getBoundingClientRect();
+    for (const ow of [owls[0], owls[1]]) {          // the small white owl first, so it can be tapped even when close
+      if (!ow.hit) continue;
+      const dx = (e.clientX - r.left - ow.hit.x) / ow.hit.rx, dy = (e.clientY - r.top - ow.hit.y) / ow.hit.ry;
+      if (dx * dx + dy * dy <= 1) return ow;
+    }
+    return null;
+  }
+  cv.addEventListener('click', e => {
+    const ow = whichOwl(e);
+    if (!ow || fin) return;
+    if (tNow < T.ready) { pokes[ow.id] = tNow; return; }
+    lastAct = tNow;
+    if (ow.isBrown) startAdvice(tNow); else startFinale(tNow);   // the white owl calls the wise owl to meet her
+  });
+  cv.addEventListener('pointermove', e => { cv.style.cursor = whichOwl(e) ? 'pointer' : 'default'; });
+
+  // ---------- Playback ----------
+  let now0 = null, tNow = 0, ended = false;
+  function restart() {
+    tNow = 0; ended = false; fin = null; lastAct = 0; pokes.b = pokes.w = -99; advs.length = 0;
+    resetLeaves(); actions.forEach(a => { a.fx = null; });
+    for (let i = speeches.length - 1; i >= 0; i--) {
+      const sp = speeches[i];
+      if (sp.kind !== 'open') { sp.el.remove(); speeches.splice(i, 1); }
+      else sp.words.forEach(w => { w.el.style.opacity = 0; });
+    }
+    hint.style.opacity = 0;
+    nnLines.forEach(l => { l.style.opacity = 0; l.style.filter = 'none'; });
+    btn.classList.remove('on');
+  }
+  function frame(now) {
+    if (now0 === null) now0 = now;
+    const dt = Math.min((now - now0) / 1000, 0.05);
+    now0 = now;
+    tNow += dt * SPEED;
+    draw(tNow);
+    updateSpeeches(tNow);
+    if (!fin && !ended && tNow >= T.end) { btn.classList.add('on'); ended = true; }
+    if (!fin && tNow > T.ready) {                    // left alone for a while, the owls go and find each other
+      const ad = advs[advs.length - 1];
+      const quiet = Math.max(T.ready, lastAct, ad ? ad.end + 2 : 0);
+      if (tNow - quiet > IDLE) startFinale(tNow);
+    }
+    if (fin && tNow >= fin.tLoop) restart();          // after the last words, start over
+    requestAnimationFrame(frame);
+  }
+  btn.addEventListener('click', restart);
+  window.addEventListener('resize', layout);
+  layout();
+  makeSpeech([{ t: 'It’s' }, { t: 'OK' }, { t: 'to' }, { t: 'let', em: 1 }, { t: 'go', em: 1 }], 'open', T.speak);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { speeches.forEach(measureSpeech); measureNight(); });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
