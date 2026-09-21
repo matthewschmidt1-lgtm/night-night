@@ -1650,7 +1650,12 @@
     const cr = cv.getBoundingClientRect();
     const a = owlAnchor(), o = S * 0.145;
     beak.x = beak.x || a.x; beak.y = beak.y || (a.y - o * 0.62);
-    sp.el.style.bottom = (H - (a.y - o * 1.5)) + 'px';
+    let bottom = H - (a.y - o * 1.5);
+    if (sp.kind === 'open' && W <= 640) {              // on a phone the opening line sits above the tree, not over its branches
+      const treeTop = gy - S * 1.06;                   // the crown reaches a little past the trunk's top
+      bottom = H - Math.max(treeTop - 18, sp.el.offsetHeight + 28);
+    }
+    sp.el.style.bottom = bottom + 'px';
     const r = sp.el.getBoundingClientRect();
     for (const w of sp.words) {
       const e = w.el;
