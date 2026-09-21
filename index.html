@@ -4,6 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>It’s OK to let go</title>
+<meta name="description" content="An aspen tree, two owls, and a sky full of stars. Tap the owl for night advice.">
+<meta name="theme-color" content="#080e1c">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://night-night-production.up.railway.app">
+<meta property="og:title" content="It’s OK to let go">
+<meta property="og:description" content="An aspen tree, two owls, and a sky full of stars. Tap the owl for night advice.">
+<meta property="og:image" content="https://night-night-production.up.railway.app/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A young green aspen tree standing under a starry night sky">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="It’s OK to let go">
+<meta name="twitter:description" content="An aspen tree, two owls, and a sky full of stars. Tap the owl for night advice.">
+<meta name="twitter:image" content="https://night-night-production.up.railway.app/og-image.png">
 <style>
   :root{
     --stage:#080e1c;
@@ -382,19 +400,262 @@
 
   // ---------- Owls ----------
   const OWL_S = 0.45;
-  const BROWN = {
-    bodyTop: '#9a866b', bodyBot: '#6e5d4a', wing: '#5f5041', wing2: '#75634f', wingLine: 'rgba(200,180,150,.28)',
-    belly: '#d8c9ab', chev: 'rgba(91,74,58,.75)', head0: '#a8947a', head1: '#8a7861', tuft: '#7d6b55',
-    rim: '#6f5d48', disc: '#cdbea0', lid: '#a99a7d', outline: 'rgba(30,22,16,.55)',
-    beakU: '#e3ad45', beakL: '#c98f36', feet: '#d3ad5e', toe: '#b78f45', iris0: '#ffe860', iris1: '#f2b400', flecks: null
+  const BROWN = {                                      // a great horned owl: mottled brown, buff belly, dark horn beak
+    bodyTop: '#917b5b', bodyBot: '#4c3d2e',
+    wing: '#4b3c30', wing2: '#6b5741', wingEdge: '#b9a37d', bar: 'rgba(24,17,12,.55)',
+    belly: '#e3d3ae', bellyShade: '#b39a72', bars: 'rgba(72,52,35,.40)', legs: '#d0ba90',
+    head0: '#a78e6c', head1: '#75604a', crown: 'rgba(34,24,17,.30)', crownLt: 'rgba(224,200,160,.24)',
+    tuft: '#7b654a', tuftTip: '#2a1e15',
+    rim: '#38281b', disc0: '#e9cb9f', disc1: '#b48959', discLine: 'rgba(92,60,34,.22)', discLt: 'rgba(255,240,208,.24)',
+    brow: 'rgba(40,27,18,.80)', wedge: 'rgba(248,237,214,.82)', eyeRing: 'rgba(30,20,13,.5)',
+    lid: '#a58461', outline: 'rgba(24,17,12,.38)',
+    beakU: '#605849', beakL: '#332d27', bristle: 'rgba(240,226,196,.78)',
+    feet: '#c9ab70', toe: '#a3845a', claw: '#2a231c',
+    iris0: '#ffe75e', iris1: '#e79e00', tex: 'gho', seed: 11
   };
-  const WHITE = {
-    bodyTop: '#f6f4ee', bodyBot: '#cbc7bb', wing: '#dedacf', wing2: '#ece9df', wingLine: 'rgba(120,110,95,.25)',
-    belly: '#fffdf8', chev: 'rgba(150,140,125,.55)', head0: '#fdfcf8', head1: '#e8e4da', tuft: null,
-    rim: '#cdc7b8', disc: '#ffffff', lid: '#efece4', outline: 'rgba(80,72,62,.45)',
-    beakU: '#5b5148', beakL: '#453d36', feet: '#eadfc4', toe: '#bfae8a', iris0: '#ffd84a', iris1: '#f0a800',
-    flecks: [[-0.16,-0.5,0.014],[0.12,-0.56,0.012],[-0.06,-0.42,0.011],[0.18,-0.42,0.013],[-0.2,-0.32,0.012],[0.06,-0.34,0.01],[-0.12,-0.2,0.012],[0.16,-0.24,0.011]]
+  const WHITE = {                                      // a snowy owl: soft white, fine dark flecks, black beak
+    bodyTop: '#f5f3ed', bodyBot: '#c6c2b6',
+    wing: '#e1ddd2', wing2: '#f2efe7', wingEdge: '#ffffff', bar: 'rgba(92,82,72,.34)',
+    belly: '#fffdf8', bellyShade: '#e0dcd0', bars: 'rgba(104,94,82,.30)', legs: '#faf7ee',
+    head0: '#fefdf9', head1: '#e6e2d8', crown: 'rgba(96,86,74,.18)', crownLt: 'rgba(255,255,255,.45)',
+    tuft: null, tuftTip: null,
+    rim: '#d7d1c3', disc0: '#ffffff', disc1: '#eeeae0', discLine: 'rgba(110,98,84,.13)', discLt: 'rgba(255,255,255,.5)',
+    brow: 'rgba(120,108,92,.30)', wedge: 'rgba(255,255,255,.7)', eyeRing: 'rgba(96,84,70,.36)',
+    lid: '#e9e5db', outline: 'rgba(70,62,52,.30)',
+    beakU: '#34312d', beakL: '#1f1c1a', bristle: 'rgba(255,255,255,.88)',
+    feet: '#f0e8d4', toe: '#d6c9ac', claw: '#2b2622',
+    iris0: '#ffe24d', iris1: '#f2aa00', tex: 'snowy', seed: 23
   };
+
+  // ---------- Owl art: each owl is painted once into a few sprites, then drawn every frame ----------
+  const owHex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const owMix = (a, b, t) => { const x = owHex(a), y = owHex(b); return x.map((v, i) => v + (y[i] - v) * t); };
+  const owCss = (c, f = 0, a = 1) => `rgba(${c.map(v => Math.round(f >= 0 ? v + (255 - v) * f : v * (1 + f)))},${a})`;
+  const SPX = 520, SP0X = -0.72, SP0Y = -1.18, SPW = 1.44, SPH = 1.36;   // sprite frame in owl units, and its pixels per unit
+  function owLayer(draw) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(SPW * SPX); c.height = Math.round(SPH * SPX);
+    const g = c.getContext('2d');
+    g.setTransform(SPX, 0, 0, SPX, -SP0X * SPX, -SP0Y * SPX);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    draw(g);
+    return c;
+  }
+  function owScale(g, x, y, w, h, fill, edge) {        // one rounded body feather, tip pointing down
+    g.beginPath();
+    g.moveTo(x - w / 2, y);
+    g.quadraticCurveTo(x - w / 2, y + h * 0.8, x, y + h);
+    g.quadraticCurveTo(x + w / 2, y + h * 0.8, x + w / 2, y);
+    g.closePath();
+    g.fillStyle = fill; g.fill();
+    if (edge) { g.strokeStyle = edge; g.lineWidth = w * 0.07; g.stroke(); }
+  }
+  function owFlight(g, L, w, fill, edge, bar) {         // a long flight feather laid along +x, with shaft and bars
+    g.beginPath();
+    g.moveTo(0, -w * 0.5);
+    g.bezierCurveTo(L * 0.4, -w * 0.62, L * 0.82, -w * 0.52, L, -w * 0.02);
+    g.bezierCurveTo(L * 0.82, w * 0.56, L * 0.4, w * 0.62, 0, w * 0.5);
+    g.closePath();
+    g.fillStyle = fill; g.fill();
+    g.strokeStyle = edge; g.lineWidth = 0.008; g.stroke();
+    g.strokeStyle = bar; g.lineWidth = 0.011;
+    g.beginPath();
+    for (const b of [0.5, 0.68, 0.84]) {
+      const hw = w * 0.5 * (1.1 - 0.9 * b * b * b);
+      g.moveTo(L * b, -hw); g.lineTo(L * b + 0.006, hw);
+    }
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 0.005;
+    g.beginPath(); g.moveTo(L * 0.05, 0); g.lineTo(L * 0.94, -0.004); g.stroke();
+  }
+  const TORSO = [[0.17, -0.70, 0.31, -0.57, 0.31, -0.40], [0.31, -0.22, 0.24, -0.05, 0.12, -0.006], [0.05, 0.012, -0.05, 0.012, -0.12, -0.006],
+                 [-0.24, -0.05, -0.31, -0.22, -0.31, -0.40], [-0.31, -0.57, -0.17, -0.70, 0, -0.70]];
+  function owTorso(g, keep) {                          // a pear: broad shoulders, tapering to the feet
+    if (!keep) g.beginPath();
+    g.moveTo(0, -0.70);
+    for (const s of TORSO) g.bezierCurveTo(s[0], s[1], s[2], s[3], s[4], s[5]);
+    g.closePath();
+  }
+  function owWing(g, sx, keep) {                       // a folded wing, shoulder to tip
+    if (!keep) g.beginPath();
+    g.moveTo(sx * 0.19, -0.68);
+    g.bezierCurveTo(sx * 0.35, -0.62, sx * 0.37, -0.33, sx * 0.27, -0.10);
+    g.bezierCurveTo(sx * 0.22, -0.02, sx * 0.13, 0.012, sx * 0.08, 0.004);
+    g.bezierCurveTo(sx * 0.05, -0.20, sx * 0.07, -0.50, sx * 0.19, -0.68);
+    g.closePath();
+  }
+  function owEdge() {                                  // points and outward normals around the torso, for a ruffled edge
+    const pts = []; let p = [0, -0.70];
+    for (const s of TORSO) {
+      for (let i = 0; i < 9; i++) {
+        const t = i / 9, u = 1 - t;
+        const x = u * u * u * p[0] + 3 * u * u * t * s[0] + 3 * u * t * t * s[2] + t * t * t * s[4];
+        const y = u * u * u * p[1] + 3 * u * u * t * s[1] + 3 * u * t * t * s[3] + t * t * t * s[5];
+        const dx = 3 * u * u * (s[0] - p[0]) + 6 * u * t * (s[2] - s[0]) + 3 * t * t * (s[4] - s[2]);
+        const dy = 3 * u * u * (s[1] - p[1]) + 6 * u * t * (s[3] - s[1]) + 3 * t * t * (s[5] - s[3]);
+        const l = Math.hypot(dx, dy) || 1;
+        pts.push({ x, y, nx: dy / l, ny: -dx / l });
+      }
+      p = [s[4], s[5]];
+    }
+    return pts;
+  }
+  function owWobble(g, cx, cy, rx, ry, fr) {           // a head outline that is slightly ruffled, like feathers
+    const n = fr.length, P = [];
+    for (let i = 0; i < n; i++) { const a = TAU * i / n; P.push([cx + Math.cos(a) * rx * fr[i], cy + Math.sin(a) * ry * fr[i]]); }
+    g.beginPath();
+    g.moveTo((P[n - 1][0] + P[0][0]) / 2, (P[n - 1][1] + P[0][1]) / 2);
+    for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n]; g.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2); }
+    g.closePath();
+  }
+
+  function owShade(g) {                               // light from the upper left, shade at the sides and toward the feet
+    let s = g.createRadialGradient(-0.16, -0.62, 0.02, -0.1, -0.5, 0.6);
+    s.addColorStop(0, 'rgba(200,215,255,.16)'); s.addColorStop(1, 'rgba(200,215,255,0)');
+    g.fillStyle = s; g.fillRect(-0.5, -0.8, 1, 0.9);
+    s = g.createLinearGradient(-0.37, 0, 0.37, 0);
+    s.addColorStop(0, 'rgba(10,8,6,.30)'); s.addColorStop(0.26, 'rgba(10,8,6,0)'); s.addColorStop(0.7, 'rgba(10,8,6,0)'); s.addColorStop(1, 'rgba(10,8,6,.36)');
+    g.fillStyle = s; g.fillRect(-0.5, -0.8, 1, 0.9);
+    s = g.createLinearGradient(0, -0.16, 0, 0.02);
+    s.addColorStop(0, 'rgba(10,8,6,0)'); s.addColorStop(1, 'rgba(10,8,6,.32)');
+    g.fillStyle = s; g.fillRect(-0.5, -0.2, 1, 0.24);
+  }
+
+  function buildOwl(pal) {
+    const rnd = mulberry(pal.seed), snowy = pal.tex === 'snowy';
+
+    // torso: ruffled edge, then rows of overlapping feathers, laid from the tail up so each row tucks under the one above
+    const body = owLayer(g => {
+      g.lineWidth = 0.01;
+      for (const p of owEdge()) {
+        if (rnd() < 0.2) continue;
+        const ca = owMix(pal.bodyTop, pal.bodyBot, clamp((p.y + 0.7) / 0.7));
+        g.strokeStyle = owCss(ca, 0.08 + (rnd() - 0.5) * 0.16, 0.8);
+        const sw = (rnd() - 0.5) * 0.6, c = Math.cos(sw), s = Math.sin(sw);
+        const nx = p.nx * c - p.ny * s, ny = p.nx * s + p.ny * c, L = 0.007 * (0.5 + rnd());
+        g.beginPath(); g.moveTo(p.x - nx * 0.01, p.y - ny * 0.01);
+        g.lineTo(p.x + nx * L, p.y + ny * L + 0.004); g.stroke();
+      }
+      owTorso(g);
+      const gr = g.createLinearGradient(0, -0.7, 0, 0);
+      gr.addColorStop(0, pal.bodyTop); gr.addColorStop(1, pal.bodyBot);
+      g.fillStyle = gr; g.fill();
+      g.save(); owTorso(g); g.clip();
+      const W = 0.052, H = 0.072, DY = 0.03;
+      let r = 0;
+      for (let y = 0.02; y > -0.74; y -= DY, r++) {
+        const base = owMix(pal.bodyTop, pal.bodyBot, clamp((y + 0.7) / 0.7));
+        for (let x = -0.36 + (r % 2) * W / 2; x < 0.37; x += W) {
+          const xx = x + (rnd() - 0.5) * W * 0.3, yy = y + (rnd() - 0.5) * DY * 0.6, w = W * (0.95 + rnd() * 0.25);
+          owScale(g, xx, yy, w, H, owCss(base, (rnd() - 0.5) * 0.28), owCss(base, -0.4, 0.5));
+          if (!snowy) {
+            if (rnd() < 0.42) { g.fillStyle = owCss(owHex(pal.wingEdge), 0, 0.42); g.beginPath(); g.ellipse(xx, yy + H * 0.78, w * 0.26, H * 0.12, 0, 0, TAU); g.fill(); }
+            if (rnd() < 0.5) { g.strokeStyle = 'rgba(20,14,10,.22)'; g.lineWidth = 0.004; g.beginPath(); g.moveTo(xx, yy + H * 0.1); g.lineTo(xx, yy + H * 0.8); g.stroke(); }
+          } else if (rnd() < 0.16) {
+            g.strokeStyle = pal.bars; g.lineWidth = 0.007; g.beginPath();
+            g.moveTo(xx - w * 0.28, yy + H * 0.5); g.lineTo(xx + w * 0.28, yy + H * 0.5 + 0.004); g.stroke();
+          }
+        }
+      }
+      g.restore();
+    });
+
+    // folded wings: small covert scales at the shoulder, long barred flight feathers down to the tips
+    const wings = owLayer(g => {
+      for (const sx of [-1, 1]) {
+        owWing(g, sx); g.fillStyle = pal.wing; g.fill();
+        g.save(); owWing(g, sx); g.clip();
+        for (let i = 0; i < 7; i++) {
+          const f = i / 6;
+          g.save(); g.translate(sx * (0.33 - f * 0.22), -0.46 + f * 0.05); g.rotate(sx * (0.02 + f * 0.13)); g.rotate(Math.PI / 2);
+          owFlight(g, 0.46 - f * 0.05, 0.066, owCss(owMix(pal.wing, pal.wing2, (i % 2) * 0.7 + rnd() * 0.3)), owCss(owHex(pal.wingEdge), 0, 0.45), pal.bar);
+          g.restore();
+        }
+        let r = 0;
+        for (let y = -0.44; y > -0.72; y -= 0.026, r++) {
+          for (let x = 0.06 + (r % 2) * 0.024; x < 0.4; x += 0.048) {
+            owScale(g, sx * x + (rnd() - 0.5) * 0.01, y + (rnd() - 0.5) * 0.008, 0.05, 0.062,
+                    owCss(owMix(pal.wing, pal.wing2, rnd()), (rnd() - 0.5) * 0.2), 'rgba(20,14,10,.3)');
+          }
+        }
+        g.restore();
+        owWing(g, sx); g.strokeStyle = owCss(owHex(pal.wingEdge), 0, 0.3); g.lineWidth = 0.01; g.stroke();
+      }
+      g.save(); owWing(g, -1); owWing(g, 1, true); g.clip(); owShade(g); g.restore();
+    });
+
+    // belly, legs and feet, and the light and shade that make the whole owl round
+    const front = owLayer(g => {
+      for (const sx of [-1, 1]) {                                   // feathered legs fade up into the belly; toes end in dark curved talons
+        const lx = sx * 0.1, lc = owHex(pal.legs);
+        const lg = g.createLinearGradient(0, -0.13, 0, 0.01);
+        lg.addColorStop(0, owCss(lc, 0, 0)); lg.addColorStop(0.4, owCss(lc, 0, 1)); lg.addColorStop(1, owCss(lc, -0.12, 1));
+        g.fillStyle = lg;
+        g.beginPath(); g.moveTo(lx - 0.05, -0.13); g.lineTo(lx + 0.05, -0.13);
+        g.quadraticCurveTo(lx + 0.064, -0.04, lx + 0.048, 0.006); g.quadraticCurveTo(lx, 0.024, lx - 0.048, 0.006); g.quadraticCurveTo(lx - 0.064, -0.04, lx - 0.05, -0.13);
+        g.fill();
+        for (let r2 = 0; r2 < 3; r2++) for (let k = -1; k <= 1; k++) {
+          owScale(g, lx + k * 0.032 + (r2 % 2) * 0.015, -0.085 + r2 * 0.03, 0.036, 0.042, owCss(lc, (rnd() - 0.5) * 0.14, 0.9), 'rgba(40,28,18,.2)');
+        }
+        for (const k of [-1, 0, 1]) {
+          const x0 = lx + k * 0.022, x1 = lx + k * 0.052, y1 = 0.03;
+          g.strokeStyle = pal.toe; g.lineWidth = 0.023; g.beginPath(); g.moveTo(x0, -0.004); g.lineTo(x1, y1); g.stroke();
+          g.strokeStyle = pal.feet; g.lineWidth = 0.015; g.beginPath(); g.moveTo(x0, -0.006); g.lineTo(x1, y1 - 0.002); g.stroke();
+          g.strokeStyle = pal.claw; g.lineWidth = 0.012; g.beginPath();
+          g.moveTo(x1, y1); g.quadraticCurveTo(x1 + k * 0.01, y1 + 0.013, x1 + k * 0.005, y1 + 0.033); g.stroke();
+        }
+      }
+      const bE = (x, y) => (x / 0.185) * (x / 0.185) + ((y + 0.28) / 0.275) * ((y + 0.28) / 0.275);
+      g.beginPath(); g.ellipse(0, -0.28, 0.185, 0.275, 0, 0, TAU);
+      const bg = g.createRadialGradient(0, -0.3, 0.02, 0, -0.28, 0.28);
+      bg.addColorStop(0, pal.belly); bg.addColorStop(1, pal.bellyShade);
+      g.fillStyle = bg; g.fill();
+      const W = 0.046, H = 0.062, DY = 0.028;
+      let r = 0;
+      for (let y = 0.0; y > -0.58; y -= DY, r++) {
+        for (let x = -0.23 + (r % 2) * W / 2; x < 0.23; x += W) {
+          const xx = x + (rnd() - 0.5) * W * 0.3, yy = y + (rnd() - 0.5) * DY * 0.5, v = bE(xx, yy);
+          if (v > 1.0 + rnd() * 0.12) continue;
+          owScale(g, xx, yy, W * (0.95 + rnd() * 0.2), H, owCss(owMix(pal.belly, pal.bellyShade, clamp(v * 0.85)), (rnd() - 0.5) * 0.1), owCss(owHex(pal.bellyShade), -0.2, 0.4));
+        }
+      }
+      g.strokeStyle = pal.bars; g.lineWidth = snowy ? 0.006 : 0.008;
+      for (let y = -0.50; y < -0.04; y += snowy ? 0.058 : 0.04) {
+        const q = 1 - ((y + 0.28) / 0.275) * ((y + 0.28) / 0.275);
+        if (q <= 0) continue;
+        const hw = 0.185 * Math.sqrt(q) - 0.022;
+        if (hw < 0.03) continue;
+        g.beginPath();
+        for (let x = -hw; x <= hw; x += snowy ? 0.036 : 0.01) {
+          if (snowy) { if (rnd() < 0.5) { g.moveTo(x, y + (rnd() - 0.5) * 0.01); g.lineTo(x + 0.024, y + (rnd() - 0.5) * 0.01); } }
+          else { const yy = y + Math.sin(x * 70 + y * 40) * 0.004; if (x === -hw) g.moveTo(x, yy); else g.lineTo(x, yy); }
+        }
+        g.stroke();
+      }
+      g.save(); g.translate(0, -0.5); g.scale(1, 0.22);            // the head's soft shadow on the chest
+      const hs = g.createRadialGradient(0, 0, 0.02, 0, 0, 0.3);
+      hs.addColorStop(0, 'rgba(12,8,5,.42)'); hs.addColorStop(1, 'rgba(12,8,5,0)');
+      g.fillStyle = hs; g.fillRect(-0.32, -0.32, 0.64, 0.64); g.restore();
+
+      g.save(); owTorso(g); g.clip(); owShade(g); g.restore();
+    });
+    return { body, wings, front };
+  }
+
+  function buildHead(pal) {                            // fixed random feather marks for the face, reused every frame
+    const rnd = mulberry(pal.seed + 100);
+    const mk = (n, r0a, r0b, la, lb, pd) => Array.from({ length: n }, () => {
+      const r0 = r0a + rnd() * r0b; return { a: rnd() * TAU, r0, r1: Math.min(1, r0 + la + rnd() * lb), dark: rnd() < pd };
+    });
+    return {
+      fr: Array.from({ length: 38 }, (_, i) => 1 + (i % 2 ? 0.014 : -0.006) + (rnd() - 0.5) * 0.014),
+      crown: mk(140, 0.45, 0.45, 0.06, 0.1, 0.6),
+      disc: mk(90, 0.3, 0.5, 0.1, 0.22, 0.55),
+      fib: Array.from({ length: 22 }, () => ({ a: rnd() * TAU, l: 0.55 + rnd() * 0.4 }))
+    };
+  }
+  BROWN._spr = buildOwl(BROWN); WHITE._spr = buildOwl(WHITE);
+  BROWN._head = buildHead(BROWN); WHITE._head = buildHead(WHITE);
   const HEAD = [[0,[0,0]],[T.owl + 4.8,[0,0]],[T.owl + 5.7,[0.2,0.8]],[T.owl + 6.7,[0.2,0.8]],[T.owl + 7.5,[0,0]],[9999,[0,0]]];
   // little life between the big moments: each owl now and then opens its wings, or preens
   const actions = [];
@@ -484,7 +745,7 @@
 
   // one owl figure, either colour. turn: -1..1 turns the face toward a partner (profile at ±1) for the kiss
   function drawOwlFig(t, px, py, o, sp) {
-    const pal = sp.pal, tu = sp.turn, ta = Math.abs(tu), bo = sp.bo;
+    const pal = sp.pal, tu = sp.turn, ta = Math.abs(tu), bo = sp.bo, spr = pal._spr, hd = pal._head;
     const ell = (x, y, rx, ry, r = 0) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, r, 0, TAU); };
     const bob = (1 + 0.012 * Math.sin(t * 1.8 + sp.seed)) * sp.sy;
 
@@ -495,14 +756,21 @@
     if (sp.rot) ctx.rotate(sp.rot);
     ctx.scale(o * (sp.sx || 1), o * bob);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
 
-    const drawWing = (sx, open, raise) => {           // a fan of feathers from the shoulder
-      ctx.save(); ctx.translate(sx * 0.2, -0.45); ctx.lineWidth = 0.011; ctx.strokeStyle = pal.outline;
-      for (let i = 0; i < 6; i++) {
-        const f = i / 5, len = (0.3 + 0.2 * f) * (0.55 + 0.45 * open);
-        ctx.save(); ctx.rotate(-sx * (raise + (f - 0.5) * 0.95 * open));
-        ctx.fillStyle = i % 2 ? pal.wing : pal.wing2;
-        ell(sx * len / 2, 0, len / 2, 0.055 + 0.02 * f); ctx.fill(); ctx.stroke();
+    const drawWing = (sx, open, raise) => {           // a fan of long barred feathers from the shoulder, short coverts on top
+      ctx.save(); ctx.translate(sx * 0.2, -0.45);
+      const edge = owCss(owHex(pal.wingEdge), 0, 0.5);
+      for (let i = 0; i < 7; i++) {
+        const f = i / 6, len = (0.3 + 0.24 * f) * (0.55 + 0.45 * open);
+        ctx.save(); ctx.rotate(-sx * (raise + (f - 0.5) * 0.95 * open)); ctx.scale(sx, 1);
+        owFlight(ctx, len, 0.066 + 0.014 * f, i % 2 ? pal.wing : pal.wing2, edge, pal.bar);
+        ctx.restore();
+      }
+      for (let i = 0; i < 5; i++) {
+        const f = i / 4, len = (0.15 + 0.06 * f) * (0.55 + 0.45 * open);
+        ctx.save(); ctx.rotate(-sx * (raise + (f - 0.5) * 0.8 * open)); ctx.scale(sx, 1);
+        owFlight(ctx, len, 0.07, i % 2 ? pal.wing2 : pal.wing, edge, 'rgba(0,0,0,0)');
         ctx.restore();
       }
       ctx.restore();
@@ -518,76 +786,96 @@
       drawWing(sp.pside, 0.4 * sp.pw, 0.1 + 0.15 * sp.pw);
     }
 
-    // body
-    const bg = ctx.createLinearGradient(0, -0.75, 0, 0);
-    bg.addColorStop(0, pal.bodyTop); bg.addColorStop(1, pal.bodyBot);
-    ctx.fillStyle = bg; ell(0, -0.34, 0.29, 0.36); ctx.fill();
-    ctx.strokeStyle = pal.outline; ctx.lineWidth = 0.014; ctx.stroke();
-    ctx.fillStyle = pal.wing; ctx.globalAlpha = sp.a * (1 - 0.85 * wopen);   // the folded wings fade as the real ones open
-    ell(-0.2, -0.33, 0.1, 0.28, 0.12); ctx.fill();
-    ell(0.2, -0.33, 0.1, 0.28, -0.12); ctx.fill();
+    ctx.drawImage(spr.body, SP0X, SP0Y, SPW, SPH);
+    ctx.globalAlpha = sp.a * (1 - smooth(0.05, 0.6, wopen));   // the folded wings hand over to the real ones as they open
+    ctx.drawImage(spr.wings, SP0X, SP0Y, SPW, SPH);
     ctx.globalAlpha = sp.a;
-    ctx.strokeStyle = pal.wingLine; ctx.lineWidth = 0.012;
-    for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) {
-      ctx.beginPath(); ctx.moveTo(sx * 0.17, -0.46 + i * 0.09); ctx.lineTo(sx * 0.24, -0.42 + i * 0.09); ctx.stroke();
-    }
-    ctx.fillStyle = pal.belly; ell(0, -0.27, 0.165, 0.25); ctx.fill();
-    ctx.strokeStyle = pal.chev; ctx.lineWidth = 0.014;
-    for (let i = 0; i < 3; i++) {
-      const y = -0.47 + i * 0.07;
-      ctx.beginPath(); ctx.moveTo(-0.07, y - 0.02); ctx.lineTo(0, y + 0.02); ctx.lineTo(0.07, y - 0.02); ctx.stroke();
-    }
-    if (pal.flecks) { ctx.fillStyle = 'rgba(140,130,115,.4)'; for (const f of pal.flecks) { ctx.beginPath(); ctx.arc(f[0], f[1], f[2], 0, TAU); ctx.fill(); } }
-    if (sp.drawer) {                                   // a small drawer in the chest, slightly open, warm light inside
-      const gl = 0.55 + 0.25 * Math.sin(t * 1.2) + 0.5 * bo;
-      const dg = ctx.createRadialGradient(0, -0.2, 0, 0, -0.2, 0.2);
-      dg.addColorStop(0, `rgba(255,205,120,${0.55 * gl})`); dg.addColorStop(1, 'rgba(255,205,120,0)');
-      ctx.fillStyle = dg; ctx.fillRect(-0.22, -0.4, 0.44, 0.44);
-      ctx.fillStyle = '#ffd27a'; ctx.fillRect(-0.066, -0.216, 0.132, 0.016);
-      ctx.fillStyle = '#8a6a3f'; ctx.fillRect(-0.07, -0.2, 0.14, 0.07);
-      ctx.strokeStyle = '#3d2f22'; ctx.lineWidth = 0.008; ctx.strokeRect(-0.07, -0.2, 0.14, 0.07);
-      ctx.fillStyle = '#e6c36a'; ctx.beginPath(); ctx.arc(0, -0.165, 0.012, 0, TAU); ctx.fill();
-    }
-    ctx.fillStyle = pal.feet;
-    ell(-0.1, -0.02, 0.055, 0.03); ctx.fill(); ell(0.1, -0.02, 0.055, 0.03); ctx.fill();
-    ctx.strokeStyle = pal.toe; ctx.lineWidth = 0.016;
-    for (const sx of [-1, 1]) for (const k of [-1, 0, 1]) {
-      ctx.beginPath(); ctx.moveTo(sx * 0.1 + k * 0.03, -0.02); ctx.lineTo(sx * 0.1 + k * 0.04, 0.014); ctx.stroke();
-    }
+    ctx.drawImage(spr.front, SP0X, SP0Y, SPW, SPH);
 
-    // head: tilts on the neck, can lean toward a partner, and turns to profile for the kiss
+    // ---- head: tilts on the neck, leans toward a partner, turns to profile for the kiss ----
     ctx.save();
     ctx.translate(sp.hdx, sp.hdy);
     ctx.translate(0, -0.58); ctx.rotate(sp.tilt); ctx.translate(0, 0.58);
-    if (pal.tuft) {
-      ctx.fillStyle = pal.tuft; const sh = tu * 0.05;
+    const lx = sp.look * 0.02, hcx = tu * 0.02, hcy = -0.7, hrx = 0.31 * (1 - 0.06 * ta), hry = 0.215;
+    if (pal.tuft) {                                    // ear tufts
+      const sh = tu * 0.05;
       for (const sx of [-1, 1]) {
-        ctx.beginPath(); ctx.moveTo(sx * 0.28 + sh, -0.8); ctx.lineTo(sx * 0.25 + sh, -1.0); ctx.lineTo(sx * 0.1 + sh, -0.9); ctx.closePath(); ctx.fill();
+        const tg = ctx.createLinearGradient(0, -0.8, 0, -1.05);
+        tg.addColorStop(0, pal.tuft); tg.addColorStop(1, pal.tuftTip);
+        ctx.fillStyle = tg;
+        ctx.beginPath();
+        ctx.moveTo(sx * 0.30 + sh, -0.78);
+        ctx.bezierCurveTo(sx * 0.34 + sh, -0.90, sx * 0.31 + sh, -0.99, sx * 0.24 + sh, -1.05);
+        ctx.bezierCurveTo(sx * 0.19 + sh, -0.99, sx * 0.13 + sh, -0.93, sx * 0.09 + sh, -0.88);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(15,10,6,.34)'; ctx.lineWidth = 0.007; ctx.beginPath();
+        for (let k = 0; k < 3; k++) { ctx.moveTo(sx * (0.26 - k * 0.035) + sh, -0.84); ctx.lineTo(sx * (0.255 - k * 0.03) + sh, -1.03 + k * 0.03); }
+        ctx.stroke();
       }
     }
-    const hg = ctx.createLinearGradient(0, -0.92, 0, -0.5);
+    owWobble(ctx, hcx, hcy, hrx, hry, hd.fr);
+    const hg = ctx.createLinearGradient(0, -0.92, 0, -0.48);
     hg.addColorStop(0, pal.head0); hg.addColorStop(1, pal.head1);
-    ctx.fillStyle = hg; ell(tu * 0.02, -0.7, 0.31 * (1 - 0.06 * ta), 0.215); ctx.fill();
-    ctx.strokeStyle = pal.outline; ctx.lineWidth = 0.014; ctx.stroke();
-    const lx = sp.look * 0.02;
-    const dcx = sx => tu * 0.19 + sx * 0.13 * (1 - 0.9 * ta) + lx;
-    ctx.fillStyle = pal.rim;
-    for (const sx of [-1, 1]) { ell(dcx(sx), -0.7, 0.17 * (1 - 0.3 * ta), 0.17); ctx.fill(); }
-    ctx.fillStyle = pal.disc;
-    for (const sx of [-1, 1]) { ell(dcx(sx), -0.7, 0.16 * (1 - 0.3 * ta), 0.16); ctx.fill(); }
+    ctx.fillStyle = hg; ctx.fill();
+    ctx.save(); ctx.clip();                            // crown feathers, as fine radial marks
+    const marks = (arr, cx, cy, rx, ry, dark, style, lw) => {
+      ctx.strokeStyle = style; ctx.lineWidth = lw; ctx.beginPath();
+      for (const s of arr) {
+        if (s.dark !== dark) continue;
+        const c = Math.cos(s.a), n = Math.sin(s.a);
+        ctx.moveTo(cx + c * rx * s.r0, cy + n * ry * s.r0); ctx.lineTo(cx + c * rx * s.r1, cy + n * ry * s.r1);
+      }
+      ctx.stroke();
+    };
+    marks(hd.crown, hcx, hcy, hrx, hry, true, pal.crown, 0.006);
+    marks(hd.crown, hcx, hcy, hrx, hry, false, pal.crownLt, 0.005);
+    ctx.restore();
+    owWobble(ctx, hcx, hcy, hrx, hry, hd.fr);
+    ctx.strokeStyle = pal.outline; ctx.lineWidth = 0.011; ctx.stroke();
 
+    // facial discs: a dark ruff, a warm centre fading to the rim, fine feather lines, and a pale wedge between the eyes
+    const dcx = sx => tu * 0.19 + sx * 0.13 * (1 - 0.9 * ta) + lx;
+    const drx = 0.166 * (1 - 0.3 * ta);
+    ctx.fillStyle = pal.rim;
+    for (const sx of [-1, 1]) { ell(dcx(sx), -0.7, drx + 0.009, 0.175); ctx.fill(); }
+    for (const sx of [-1, 1]) {
+      const dx = dcx(sx), gr = ctx.createRadialGradient(dx, -0.715, 0.01, dx, -0.7, 0.17);
+      gr.addColorStop(0, pal.disc0); gr.addColorStop(1, pal.disc1);
+      ctx.fillStyle = gr; ell(dx, -0.7, drx, 0.166); ctx.fill();
+      ctx.save(); ctx.clip();
+      marks(hd.disc, dx, -0.7, drx, 0.166, true, pal.discLine, 0.0045);
+      marks(hd.disc, dx, -0.7, drx, 0.166, false, pal.discLt, 0.004);
+      ctx.restore();
+    }
+    const fx = tu * 0.2 + lx * 1.2, kw = 0.05 * (1 - 0.75 * ta);
+    ctx.fillStyle = pal.wedge;
+    ctx.beginPath(); ctx.moveTo(fx, -0.87);
+    ctx.quadraticCurveTo(fx + kw * 1.5, -0.76, fx + kw * 0.6, -0.62); ctx.lineTo(fx - kw * 0.6, -0.62);
+    ctx.quadraticCurveTo(fx - kw * 1.5, -0.76, fx, -0.87); ctx.fill();
+
+    // eyes: dark surround, a fibrous golden iris with a dark edge, round pupil, glassy highlights; eyelids for blinking
     const er0 = 0.1, c = 1 - sp.open;
     for (const sx of (tu >= 0 ? [-1, 1] : [1, -1])) {  // far eye first, near eye on top
       const far = tu !== 0 && sx === (tu > 0 ? -1 : 1);
       const er = er0 * (far ? 1 - 0.5 * ta : 1 - 0.08 * ta), kk = er / er0;
       const ex = tu * 0.2 + sx * 0.13 * (1 - 0.9 * ta) + lx * 1.4, ey = -0.7;
+      ctx.save(); ctx.translate(ex, ey); ctx.rotate(sx * 0.12 * (1 - ta));               // a tapered brow above the eye
+      ctx.fillStyle = pal.brow; ctx.beginPath();
+      ctx.arc(0, 0.004 * kk, 0.136 * kk, 3.456, 5.969); ctx.arc(0, 0.0597 * kk, 0.1617 * kk, 5.634, 3.789, true);
+      ctx.closePath(); ctx.fill(); ctx.restore();
+      ctx.globalAlpha = sp.a * (1 - 0.6 * c); ctx.fillStyle = pal.eyeRing; ell(ex, ey, er * 1.12, er * 1.12); ctx.fill(); ctx.globalAlpha = sp.a;
       const eg = ctx.createRadialGradient(ex, ey - 0.02, 0.01, ex, ey, er);
       eg.addColorStop(0, pal.iris0); eg.addColorStop(1, pal.iris1);
       ctx.fillStyle = eg; ell(ex, ey, er, er); ctx.fill();
-      ctx.strokeStyle = 'rgba(120,80,0,.7)'; ctx.lineWidth = 0.012; ctx.stroke();
+      ctx.strokeStyle = 'rgba(150,88,0,.30)'; ctx.lineWidth = 0.0045 * kk; ctx.beginPath();
+      for (const f of hd.fib) { const cs = Math.cos(f.a), sn = Math.sin(f.a); ctx.moveTo(ex + cs * er * 0.5, ey + sn * er * 0.5); ctx.lineTo(ex + cs * er * f.l, ey + sn * er * f.l); }
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(105,60,0,.75)'; ctx.lineWidth = 0.012 * kk; ell(ex, ey, er * 0.965, er * 0.965); ctx.stroke();
       const pxo = sp.look * 0.03 + tu * 0.03, pyo = sp.lookY * 0.03;
-      ctx.fillStyle = '#0d0a08'; ell(ex + pxo, ey + pyo, 0.05 * kk, 0.05 * kk); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.9)'; ell(ex + pxo + 0.018, ey + pyo - 0.02, 0.015 * kk, 0.015 * kk); ctx.fill();
+      ctx.fillStyle = '#0b0806'; ell(ex + pxo, ey + pyo, 0.05 * kk, 0.05 * kk); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.ellipse(ex - 0.004, ey - er * 0.42, er * 0.6, er * 0.32, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.95)'; ell(ex + pxo + 0.02, ey + pyo - 0.022, 0.016 * kk, 0.016 * kk); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.5)'; ell(ex + pxo - 0.019, ey + pyo + 0.02, 0.007 * kk, 0.007 * kk); ctx.fill();
       if (c > 0.01) {
         ctx.save(); ell(ex, ey, er, er); ctx.clip();
         ctx.fillStyle = pal.lid;
@@ -596,7 +884,7 @@
         ctx.fillRect(ex - er - 0.01, ey - er - 0.02, 2 * er + 0.02, topY - (ey - er - 0.02));
         ctx.fillRect(ex - er - 0.01, botY, 2 * er + 0.02, ey + er + 0.02 - botY);
         ctx.restore();
-        ctx.strokeStyle = 'rgba(60,45,30,.9)'; ctx.lineWidth = 0.014 + 0.012 * c;
+        ctx.strokeStyle = 'rgba(40,28,18,.9)'; ctx.lineWidth = 0.014 + 0.012 * c;
         const hl = Math.sqrt(Math.max(0, er * er - (topY - ey) * (topY - ey)));
         ctx.beginPath(); ctx.moveTo(ex - hl, topY); ctx.lineTo(ex + hl, topY); ctx.stroke();
       }
@@ -605,14 +893,26 @@
     const bk = Math.max(bo, sp.nib || 0);              // the beak also nibbles while preening
     const bx = tu * 0.30 + lx * 1.4;                   // beak: points down from the front, sideways in profile
     ctx.save(); ctx.translate(bx, -0.675); ctx.rotate(-tu * (Math.PI / 2) * 0.85);
-    if (bk > 0.03) {
+    ctx.strokeStyle = pal.bristle; ctx.lineWidth = 0.006; ctx.beginPath();   // fine bristles fanning out around the beak
+    for (const s of [-1, 1]) for (let k = 0; k < 5; k++) {
+      const a = 0.25 + k * 0.28;
+      ctx.moveTo(s * 0.02, 0.004 + k * 0.004); ctx.lineTo(s * (0.02 + 0.06 * Math.cos(a * 0.6)), -0.015 + 0.055 * Math.sin(a) - 0.01);
+    }
+    ctx.stroke();
+    if (bk > 0.03) {                                   // an open beak shows a dark mouth and a lower mandible
       ctx.fillStyle = '#2d1f14'; ctx.beginPath();
       ctx.moveTo(-0.03, 0.02); ctx.lineTo(0.03, 0.02); ctx.lineTo(0, 0.06 + 0.05 * bk); ctx.closePath(); ctx.fill();
     }
-    ctx.fillStyle = pal.beakL; ctx.beginPath();
-    ctx.moveTo(-0.026, 0.027); ctx.lineTo(0.026, 0.027); ctx.lineTo(0, 0.063 + 0.055 * bk); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = pal.beakU; ctx.beginPath();
-    ctx.moveTo(-0.036, 0); ctx.lineTo(0.036, 0); ctx.lineTo(0, 0.075); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = pal.beakL; ctx.beginPath();        // lower mandible
+    ctx.moveTo(-0.027, 0.024); ctx.quadraticCurveTo(-0.02, 0.048 + 0.05 * bk, 0, 0.063 + 0.055 * bk);
+    ctx.quadraticCurveTo(0.02, 0.048 + 0.05 * bk, 0.027, 0.024); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = pal.beakU; ctx.beginPath();        // upper mandible, curving to a hooked tip
+    ctx.moveTo(-0.038, -0.003); ctx.bezierCurveTo(-0.036, 0.034, -0.013, 0.062, 0, 0.075);
+    ctx.bezierCurveTo(0.013, 0.062, 0.036, 0.034, 0.038, -0.003); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 0.006;
+    ctx.beginPath(); ctx.moveTo(0, 0.006); ctx.lineTo(0, 0.058); ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,.5)';
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * 0.015, 0.014, 0.005, 0, TAU); ctx.fill(); }
     ctx.restore();
     ctx.restore();   // head
     ctx.restore();
@@ -1263,7 +1563,7 @@
         if (d > 0 && d < 1) bo = Math.max(bo, Math.sin(d * Math.PI));
       }
       drawOwlFig(t, px, py, o, {
-        pal: ow.pal, a, seed: ow.seed, isBrown: ow.isBrown, drawer: ow.isBrown, bo,
+        pal: ow.pal, a, seed: ow.seed, isBrown: ow.isBrown, bo,
         tilt: hd0[0] + 0.025 * Math.sin(t * 0.7 + ow.seed) * a + gz.w * gz.x * 0.14 + nod + poke + tiltK + pside * 0.55 * pw,
         look: lerp(lerp(hd0[1] * (ow.isBrown ? 1 : 0), gz.x, gz.w), pside * 0.6, pw), lookY: lerp(gz.y * gz.w, 0.9, pw),
         open: eyeOpen(t, ow.blinks, ow.restDelay, Math.max(pw, stretchW)) * (1 - 0.55 * pw), turn, hdx, hdy, fly, sy: sy * (1 + 0.03 * stretchW), rot,
