@@ -81,6 +81,11 @@
   }
   #replay.on{opacity:1;pointer-events:auto;transition:opacity 1.4s ease 3s}
   #replay:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+  #credit{
+    position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+    font:300 12px/1 var(--sf);letter-spacing:.06em;color:rgba(245,245,247,.62);
+    text-shadow:0 0 6px rgba(6,10,22,.95), 0 0 2px rgba(6,10,22,.95), 0 1px 1px rgba(0,0,0,.6);pointer-events:none;user-select:none;
+  }
 </style>
 </head>
 <body>
@@ -88,6 +93,7 @@
 <div id="hint">Tap the owl for night advice</div>
 <div id="nn" aria-hidden="true"><div class="nl">Ni<span class="gg">g<i class="bl"></i></span>ht</div><div class="nl">Ni<span class="gg">g<i class="bl"></i></span>ht</div></div>
 <button id="replay" type="button">Replay</button>
+<div id="credit">made by Matty</div>
 
 <script>
 (() => {
