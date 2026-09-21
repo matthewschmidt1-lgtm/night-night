@@ -82,10 +82,14 @@
   #replay.on{opacity:1;pointer-events:auto;transition:opacity 1.4s ease 3s}
   #replay:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
   #credit{
-    opacity:0;position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+    opacity:0;position:fixed;right:6px;bottom:calc(env(safe-area-inset-bottom,0px) + 2px);padding:10px;
     font:300 12px/1 var(--sf);letter-spacing:.06em;color:rgba(245,245,247,.62);
-    text-shadow:0 0 6px rgba(6,10,22,.95), 0 0 2px rgba(6,10,22,.95), 0 1px 1px rgba(0,0,0,.6);pointer-events:none;user-select:none;
+    text-shadow:0 0 6px rgba(6,10,22,.95), 0 0 2px rgba(6,10,22,.95), 0 1px 1px rgba(0,0,0,.6);
+    text-decoration:none;pointer-events:none;user-select:none;-webkit-tap-highlight-color:transparent;
   }
+  #credit.on{pointer-events:auto;cursor:pointer}
+  #credit.on:hover,#credit:focus-visible{color:rgba(245,245,247,.95);text-decoration:underline;text-underline-offset:3px}
+  #credit:focus-visible{outline:2px solid var(--ink);outline-offset:-2px;border-radius:6px}
 </style>
 </head>
 <body>
@@ -93,7 +97,7 @@
 <div id="hint">Tap the owl for night advice</div>
 <div id="nn" aria-hidden="true"><div class="nl">Ni<span class="gg">g<i class="bl"></i></span>ht</div><div class="nl">Ni<span class="gg">g<i class="bl"></i></span>ht</div></div>
 <button id="replay" type="button">Replay</button>
-<div id="credit">made by Matty</div>
+<a id="credit" href="https://matthew-schmidt-production.up.railway.app/" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">made by Matty</a>
 
 <script>
 (() => {
@@ -1700,7 +1704,12 @@
     if (fin) busy = Math.max(busy, smooth(fin.f0, fin.f0 + 0.5, t));
     hint.style.opacity = (0.78 * smooth(T.ready, T.ready + 2, t) * (1 - busy)).toFixed(3);
     // the credit appears only at the very end, once both "Night"s are showing, and leaves with them
-    credit.style.opacity = (fin ? smooth(fin.tN2 + 0.8, fin.tN2 + 2.8, t) * (1 - smooth(fin.tNF0, fin.tNF1, t)) : 0).toFixed(3);
+    const cr = fin ? smooth(fin.tN2 + 0.8, fin.tN2 + 2.8, t) * (1 - smooth(fin.tNF0, fin.tNF1, t)) : 0;
+    credit.style.opacity = cr.toFixed(3);
+    const crOn = cr > 0.6;                              // only tappable (and focusable) while it is clearly visible
+    if (crOn !== credit.classList.contains('on')) {
+      credit.classList.toggle('on', crOn); credit.tabIndex = crOn ? 0 : -1; credit.setAttribute('aria-hidden', crOn ? 'false' : 'true');
+    }
     if (fin && t >= fin.tN1 - 0.1) {                   // the last words, on black, in two beats
       const out = 1 - smooth(fin.tNF0, fin.tNF1, t);
       [fin.tN1, fin.tN2].forEach((t0, i) => {
